@@ -1,0 +1,111 @@
+{
+  "theme": "LIGHT",
+  "archetype": "1 (Organic & Earthy)",
+  "vibe": "Clinical Precision & Calm. Professional, trustworthy, reducing cognitive load for surgeons.",
+  "colors": {
+    "background": {
+      "primary": "#F9F9F8",
+      "secondary": "#F0F0EE",
+      "surface": "#FFFFFF"
+    },
+    "text": {
+      "primary": "#2A2F35",
+      "secondary": "#5C6773",
+      "disabled": "#A1A9B3"
+    },
+    "brand": {
+      "primary": "#82A098",
+      "primary_hover": "#6B8A82",
+      "accent": "#C27E70"
+    },
+    "status": {
+      "success": "#82A098",
+      "warning": "#E8A76C",
+      "error": "#C27E70",
+      "info": "#7B9EBB"
+    },
+    "border": "#E5E5E2"
+  },
+  "typography": {
+    "fonts": {
+      "headings": "Work Sans, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "IBM Plex Mono, monospace"
+    },
+    "scales": {
+      "h1": "text-4xl tracking-tight leading-none font-semibold",
+      "h2": "text-2xl tracking-tight leading-snug font-medium",
+      "h3": "text-xl leading-snug font-medium",
+      "h4": "text-lg leading-normal font-medium",
+      "body": "text-base leading-relaxed text-secondary",
+      "small": "text-sm leading-normal text-secondary",
+      "label": "text-xs uppercase tracking-[0.2em] font-medium text-secondary"
+    }
+  },
+  "layout_spacing": {
+    "system": "Generous Spacing Philosophy",
+    "dashboard_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "container_padding": "p-6 md:p-8",
+    "card_radius": "rounded-xl",
+    "card_style": "bg-white border border-[#E5E5E2] shadow-sm",
+    "alignment": "Left-align form inputs and data grids; optical alignment for icons."
+  },
+  "components": {
+    "navigation": {
+      "style": "Vertical sidebar for desktop (collapsible), bottom/hamburger for mobile. bg-[#F0F0EE] border-r border-[#E5E5E2]."
+    },
+    "fdi_dental_chart": {
+      "description": "Interactive horizontal UI mapping teeth using FDI 2-digit system. Quadrant 1/4 (Right), Quadrant 2/3 (Left).",
+      "layout": "Grid table or symmetric U-shape mirror. Split top (18-11 | 21-28) and bottom (48-41 | 31-38).",
+      "interactions": "Clickable tooth elements, tooltips for statuses, distinct colors for missing vs. treated vs. healthy."
+    },
+    "implant_log_form": {
+      "style": "Multi-step or segmented tabs using Shadcn Tabs. Left-aligned labels, generous input heights.",
+      "sections": [
+        "Patient Info",
+        "Surgical Approach",
+        "Implant Specs (Brand, Connection, Size, Torque)",
+        "Grafts/Lifts (Sinus, Bone, Pterygoid, Zygomatic)",
+        "Osseointegration Timer"
+      ]
+    },
+    "cards": {
+      "style": "Neumorphic subtle depth or flat 1px border. No heavy drop shadows. Focus state adds ring-2 ring-primary/50."
+    }
+  },
+  "media": {
+    "icons_library": "@phosphor-icons/react",
+    "image_urls": [
+      {
+        "url": "https://images.pexels.com/photos/1029624/pexels-photo-1029624.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "auth_background",
+        "description": "Serene abstract geometric background for Login/Signup screens to impart a premium feel."
+      },
+      {
+        "url": "https://images.pexels.com/photos/6502343/pexels-photo-6502343.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "empty_state_illustration",
+        "description": "High-quality closeup of a dental implant for dashboard empty states or 'No active logs' placeholders."
+      },
+      {
+        "url": "https://images.pexels.com/photos/4687341/pexels-photo-4687341.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "profile_placeholder",
+        "description": "Placeholder for dentist profile picture during registration and dashboard header."
+      }
+    ]
+  },
+  "motion_accessibility": {
+    "hover_states": "hover:bg-[#F0F0EE] hover:text-[#2A2F35] transition-colors duration-200 ease-in-out",
+    "focus_states": "focus:ring-2 focus:ring-[#82A098] focus:outline-none focus:ring-offset-1",
+    "test_ids": "All interactive elements MUST include 'data-testid' (e.g., 'data-testid=\"login-submit\"')",
+    "contrast": "Ensure text contrast on buttons > 4.5:1. Primary text on surface > 7:1."
+  },
+  "instructions_to_main_agent": [
+    "Install `@phosphor-icons/react` for the clinical precision icon set.",
+    "Use Shadcn/UI for Forms, Inputs, Selects, Tabs, and Dialogs. Apply custom styling from the 'colors' and 'typography' objects.",
+    "Implement the FDI Dental Chart with a responsive CSS Grid mirroring the dentist's perspective. Ensure interactive states for clicking teeth to add implant logs.",
+    "For the implant specs, use precise grouped fields (e.g., Torque, Size, Brand, Hex, Conical) with Shadcn Select and Inputs.",
+    "Build the multi-clinic registration with dependent dropdowns (Country -> Registration Number -> College Name selection/manual entry).",
+    "Incorporate a 90-day Osseointegration counter widget in the patient dashboard using progress rings or timeline charts.",
+    "Financial analysis and analytics should use 'recharts' configured with the designated theme colors."
+  ]
+}
