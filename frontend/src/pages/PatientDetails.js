@@ -525,58 +525,60 @@ const PatientDetails = () => {
           {/* Upper Teeth */}
           <div>
             <p className="text-xs text-[#5C6773] mb-3 text-center uppercase tracking-wider">Upper Jaw</p>
-            <div className="flex justify-center gap-8">
-              {FDI_CHART.upper.map((quadrant, qIndex) => (
-                <div key={qIndex} className="flex gap-2">
-                  {quadrant.map((tooth) => {
-                    const implant = getToothStatus(tooth);
-                    return (
-                      <button
-                        key={tooth}
-                        onClick={() => handleToothClick(tooth)}
-                        data-testid={`tooth-${tooth}`}
-                        className={`w-12 h-16 rounded-lg border-2 flex flex-col items-center justify-center text-xs font-medium transition-all duration-200 ${
-                          implant
-                            ? 'bg-[#82A098] border-[#82A098] text-white hover:bg-[#6B8A82]'
-                            : 'bg-white border-[#E5E5E2] text-[#2A2F35] hover:border-[#82A098] hover:bg-[#F9F9F8]'
-                        }`}
-                      >
-                        <Tooth size={20} weight={implant ? 'fill' : 'regular'} />
-                        <span className="mt-1">{tooth}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+            <div className="overflow-x-auto pb-2">
+              <div className="flex justify-center gap-8 min-w-max">
+                {FDI_CHART.upper.map((quadrant, qIndex) => (
+                  <div key={qIndex} className="flex gap-2">
+                    {quadrant.map((tooth) => {
+                      const implant = getToothStatus(tooth);
+                      return (
+                        <button
+                          key={tooth}
+                          onClick={() => handleToothClick(tooth)}
+                          data-testid={`tooth-${tooth}`}
+                          className={`w-12 h-12 rounded-lg border-2 flex items-center justify-center text-sm font-medium transition-all duration-200 ${
+                            implant
+                              ? 'bg-[#82A098] border-[#82A098] text-white hover:bg-[#6B8A82]'
+                              : 'bg-white border-[#E5E5E2] text-[#2A2F35] hover:border-[#82A098] hover:bg-[#F9F9F8]'
+                          }`}
+                        >
+                          {tooth}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Lower Teeth */}
           <div>
             <p className="text-xs text-[#5C6773] mb-3 text-center uppercase tracking-wider">Lower Jaw</p>
-            <div className="flex justify-center gap-8">
-              {FDI_CHART.lower.map((quadrant, qIndex) => (
-                <div key={qIndex} className="flex gap-2">
-                  {quadrant.map((tooth) => {
-                    const implant = getToothStatus(tooth);
-                    return (
-                      <button
-                        key={tooth}
-                        onClick={() => handleToothClick(tooth)}
-                        data-testid={`tooth-${tooth}`}
-                        className={`w-12 h-16 rounded-lg border-2 flex flex-col items-center justify-center text-xs font-medium transition-all duration-200 ${
-                          implant
-                            ? 'bg-[#82A098] border-[#82A098] text-white hover:bg-[#6B8A82]'
-                            : 'bg-white border-[#E5E5E2] text-[#2A2F35] hover:border-[#82A098] hover:bg-[#F9F9F8]'
-                        }`}
-                      >
-                        <span className="mb-1">{tooth}</span>
-                        <Tooth size={20} weight={implant ? 'fill' : 'regular'} />
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+            <div className="overflow-x-auto pb-2">
+              <div className="flex justify-center gap-8 min-w-max">
+                {FDI_CHART.lower.map((quadrant, qIndex) => (
+                  <div key={qIndex} className="flex gap-2">
+                    {quadrant.map((tooth) => {
+                      const implant = getToothStatus(tooth);
+                      return (
+                        <button
+                          key={tooth}
+                          onClick={() => handleToothClick(tooth)}
+                          data-testid={`tooth-${tooth}`}
+                          className={`w-12 h-12 rounded-lg border-2 flex items-center justify-center text-sm font-medium transition-all duration-200 ${
+                            implant
+                              ? 'bg-[#82A098] border-[#82A098] text-white hover:bg-[#6B8A82]'
+                              : 'bg-white border-[#E5E5E2] text-[#2A2F35] hover:border-[#82A098] hover:bg-[#F9F9F8]'
+                          }`}
+                        >
+                          {tooth}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
