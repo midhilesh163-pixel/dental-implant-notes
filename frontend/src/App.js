@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
 import PatientDetails from './pages/PatientDetails';
+import MedicalVault from './pages/MedicalVault';
 import Analytics from './pages/Analytics';
 import Clinics from './pages/Clinics';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -23,6 +24,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="patients" element={<Patients />} />
             <Route path="patients/:id" element={<PatientDetails />} />
+            <Route path="patients/:patientId/implant/:implantId/vault" element={<MedicalVault />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="clinics" element={<Clinics />} />
           </Route>

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Tooth } from '@phosphor-icons/react';
+import { ArrowLeft, Plus, Tooth, Camera } from '@phosphor-icons/react';
 import {
   Dialog,
   DialogContent,
@@ -604,6 +604,10 @@ const PatientDetails = () => {
           <div className="space-y-4">
             {implants.map((implant) => {
               const daysRemaining = getDaysRemaining(implant.osseointegration_date);
+              const photoCount = implant.clinical_photos?.length || 0;
+              const radioCount = implant.radiographs?.length || 0;
+              const totalUploads = photoCount + radioCount;
+              
               return (
                 <div 
                   key={implant._id} 
@@ -611,21 +615,41 @@ const PatientDetails = () => {
                   className="border border-[#E5E5E2] rounded-lg p-4 hover:border-[#82A098] transition-all duration-200"
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1">
                       <div className="w-10 h-10 bg-[#82A098] rounded-lg flex items-center justify-center text-white font-medium">
                         {implant.tooth_number}
                       </div>
                       <div>
                         <h3 className="font-medium text-[#2A2F35]">{implant.implant_type} Implant</h3>
                         <p className="text-sm text-[#5C6773]">{implant.brand}</p>
+                        {implant.case_number && (
+                          <p className="text-xs text-[#5C6773] mt-1">Case: {implant.case_number}</p>
+                        )}
                       </div>
                     </div>
-                    {daysRemaining > 0 && (
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-[#E8A76C]">{daysRemaining} days</p>
-                        <p className="text-xs text-[#5C6773]">until osseointegration</p>
-                      </div>
-                    )}
+                    
+                    <div className="flex items-center gap-3">
+                      {daysRemaining > 0 && (
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-[#E8A76C]">{daysRemaining} days</p>
+                          <p className="text-xs text-[#5C6773]">until osseointegration</p>
+                        </div>
+                      )}
+                      
+                      <Link
+                        to={`/patients/${id}/implant/${implant._id}/vault`}
+                        data-testid={`medical-vault-link-${implant._id}`}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#7B9EBB] hover:bg-[#6B8A9F] text-white rounded-lg transition-colors duration-200 text-sm"
+                      >
+                        <Camera size={16} weight="bold" />
+                        Medical Vault
+                        {totalUploads > 0 && (
+                          <span className="ml-1 px-2 py-0.5 bg-white text-[#7B9EBB] rounded-full text-xs font-medium">
+                            {totalUploads}/12
+                          </span>
+                        )}
+                      </Link>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                     <div>
