@@ -2,69 +2,101 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, Upload, Camera, CheckCircle, X } from '@phosphor-icons/react';
+import { ArrowLeft, Upload, Plus, FolderOpen, Image, X } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const PHOTO_VIEWS = [
-  { id: 'front_centric', label: 'View 1: Front - Centric Occlusion' },
-  { id: 'front_protrusive', label: 'View 2: Front - Protrusive' },
-  { id: 'right_centric', label: 'View 3: Right - Centric Occlusion' },
-  { id: 'left_centric', label: 'View 4: Left - Centric Occlusion' },
-  { id: 'front_right_exclusive', label: 'View 5: Front - Right Exclusive' },
-  { id: 'front_left_exclusive', label: 'View 6: Front - Left Exclusive' },
-  { id: 'maxillary_occlusal', label: 'View 7: Maxillary Occlusal' },
-  { id: 'mandibular_occlusal', label: 'View 8: Mandibular Occlusal' }
+  { id: 'front_centric', label: 'Front - Centric Occlusion' },
+  { id: 'front_protrusive', label: 'Front - Protrusive' },
+  { id: 'right_centric', label: 'Right - Centric Occlusion' },
+  { id: 'left_centric', label: 'Left - Centric Occlusion' },
+  { id: 'front_right_exclusive', label: 'Front - Right Exclusive' },
+  { id: 'front_left_exclusive', label: 'Front - Left Exclusive' },
+  { id: 'maxillary_occlusal', label: 'Maxillary Occlusal' },
+  { id: 'mandibular_occlusal', label: 'Mandibular Occlusal' }
 ];
 
 const RADIOGRAPH_VIEWS = [
-  { id: 'pre_surgical', label: 'View 1: Pre-Surgical' },
-  { id: 'immediate_post_surgical', label: 'View 2: Immediate Post-Surgical' },
-  { id: 'immediate_post_prosthetic', label: 'View 3: Immediate Post-Prosthetic' },
-  { id: 'one_year_followup', label: 'View 4: 1 Year Follow-Up' }
+  { id: 'pre_surgical', label: 'Pre-Surgical' },
+  { id: 'immediate_post_surgical', label: 'Immediate Post-Surgical' },
+  { id: 'immediate_post_prosthetic', label: 'Immediate Post-Prosthetic' },
+  { id: 'one_year_followup', label: '1 Year Follow-Up' }
 ];
 
 const MedicalVault = () => {
-  const { patientId, implantId } = useParams();
+  const { patientId } = useParams();
   const navigate = useNavigate();
-  const [implant, setImplant] = useState(null);
   const [patient, setPatient] = useState(null);
+  const [allPhotos, setAllPhotos] = useState([]);
+  const [allRadiographs, setAllRadiographs] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [photos, setPhotos] = useState({});
-  const [radiographs, setRadiographs] = useState({});
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadType, setUploadType] = useState('photo');
+  const [uploadDate, setUploadDate] = useState(new Date().toISOString().split('T')[0]);
   const [uploadingFiles, setUploadingFiles] = useState({});
 
   useEffect(() => {
     fetchData();
-  }, [patientId, implantId]);
+  }, [patientId]);
 
   const fetchData = async () => {
     try {
-      const [patientRes, implantRes] = await Promise.all([
-        axios.get(`${API_URL}/api/patients/${patientId}`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/implants/${implantId}`, { withCredentials: true })
-      ]);
-      
+      const patientRes = await axios.get(`${API_URL}/api/patients/${patientId}`, { 
+        withCredentials: true 
+      });
       setPatient(patientRes.data);
-      setImplant(implantRes.data);
       
-      // Load existing photos and radiographs
-      if (implantRes.data.clinical_photos) {
-        const photoMap = {};
-        implantRes.data.clinical_photos.forEach(photo => {
-          photoMap[photo.view_type] = photo;
-        });
-        setPhotos(photoMap);
+      // Fetch all implants for this patient to get photos/radiographs
+      const implantsRes = await axios.get(`${API_URL}/api/implants?patient_id=${patientId}`, {
+        withCredentials: true
+      });
+      
+      // Aggregate all photos and radiographs from all implants
+      const photos = [];
+      const radiographs = [];
+      
+      implantsRes.data.forEach(implant => {
+        if (implant.clinical_photos) {
+          implant.clinical_photos.forEach(photo => {
+            photos.push({
+              ...photo,
+              implant_id: implant._id,
+              tooth_number: implant.tooth_number,
+              date: photo.uploaded_at || implant.created_at
+            });
+          });
+        }
+        if (implant.radiographs) {
+          implant.radiographs.forEach(radio => {
+            radiographs.push({
+              ...radio,
+              implant_id: implant._id,
+              tooth_number: implant.tooth_number,
+              date: radio.uploaded_at || implant.created_at
+            });
+          });
+        }
+      });
+      
+      setAllPhotos(photos);
+      setAllRadiographs(radiographs);
+      
+      // Select first item if available
+      if (photos.length > 0) {
+        setSelectedItem({ type: 'photo', ...photos[0] });
+      } else if (radiographs.length > 0) {
+        setSelectedItem({ type: 'radiograph', ...radiographs[0] });
       }
       
-      if (implantRes.data.radiographs) {
-        const radioMap = {};
-        implantRes.data.radiographs.forEach(radio => {
-          radioMap[radio.view_type] = radio;
-        });
-        setRadiographs(radioMap);
-      }
     } catch (error) {
       toast.error('Failed to load data');
       navigate(`/patients/${patientId}`);
@@ -73,16 +105,16 @@ const MedicalVault = () => {
     }
   };
 
-  const handleFileUpload = async (file, viewType, type) => {
-    const uploadKey = `${type}_${viewType}`;
+  const handleFileUpload = async (file, viewType, implantId) => {
+    const uploadKey = `${uploadType}_${viewType}`;
     setUploadingFiles(prev => ({ ...prev, [uploadKey]: true }));
 
     try {
       const formData = new FormData();
       formData.append('file', file);
 
-      const endpoint = type === 'photo' ? 'photos' : 'radiographs';
-      const { data } = await axios.post(
+      const endpoint = uploadType === 'photo' ? 'photos' : 'radiographs';
+      await axios.post(
         `${API_URL}/api/implants/${implantId}/${endpoint}?view_type=${viewType}`,
         formData,
         {
@@ -91,13 +123,8 @@ const MedicalVault = () => {
         }
       );
 
-      if (type === 'photo') {
-        setPhotos(prev => ({ ...prev, [viewType]: data }));
-      } else {
-        setRadiographs(prev => ({ ...prev, [viewType]: data }));
-      }
-
       toast.success('File uploaded successfully');
+      fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to upload file');
     } finally {
@@ -105,240 +132,274 @@ const MedicalVault = () => {
     }
   };
 
-  const getUploadProgress = () => {
-    const totalPhotos = PHOTO_VIEWS.length;
-    const totalRadiographs = RADIOGRAPH_VIEWS.length;
-    const uploadedPhotos = Object.keys(photos).length;
-    const uploadedRadiographs = Object.keys(radiographs).length;
-    const total = totalPhotos + totalRadiographs;
-    const uploaded = uploadedPhotos + uploadedRadiographs;
-    return { uploaded, total, percentage: Math.round((uploaded / total) * 100) };
+  const groupByDate = (items) => {
+    const grouped = {};
+    items.forEach(item => {
+      const date = new Date(item.date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+      if (!grouped[date]) {
+        grouped[date] = [];
+      }
+      grouped[date].push(item);
+    });
+    return grouped;
   };
 
-  const handleSubmit = () => {
-    const progress = getUploadProgress();
-    if (progress.uploaded < progress.total) {
-      toast.warning(`Please upload all required files (${progress.uploaded}/${progress.total} completed)`);
-      return;
-    }
-    toast.success('All files uploaded successfully');
-    navigate(`/patients/${patientId}`);
-  };
+  const photosByDate = groupByDate(allPhotos);
+  const radiographsByDate = groupByDate(allRadiographs);
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-[#E5E5E2] rounded w-1/4"></div>
-          <div className="h-64 bg-[#E5E5E2] rounded-xl"></div>
-        </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82A098]"></div>
       </div>
     );
   }
 
-  const progress = getUploadProgress();
-
   return (
-    <div className="p-8" style={{ fontFamily: 'IBM Plex Sans, sans-serif' }}>
-      <button
-        onClick={() => navigate(`/patients/${patientId}`)}
-        data-testid="back-button"
-        className="flex items-center gap-2 text-[#5C6773] hover:text-[#82A098] mb-6 transition-colors duration-200"
-      >
-        <ArrowLeft size={20} />
-        Back to Patient
-      </button>
-
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h1 className="text-3xl font-semibold text-[#2A2F35] tracking-tight" style={{ fontFamily: 'Work Sans, sans-serif' }}>
-              Medical-Legal Vault
-            </h1>
-            <p className="text-[#5C6773] mt-1">Post-Operative Compliance</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-[#5C6773] uppercase tracking-wider">Case Number Reference</p>
-            <p className="text-lg font-medium text-[#2A2F35]">{implant?.case_number || 'N/A'}</p>
-          </div>
-        </div>
-        
-        {/* Progress Bar */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between text-sm text-[#5C6773] mb-2">
-            <span>Upload Progress</span>
-            <span className="font-medium">{progress.uploaded} of {progress.total} slots completed</span>
-          </div>
-          <div className="w-full h-2 bg-[#E5E5E2] rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-[#82A098] transition-all duration-500 rounded-full"
-              style={{ width: `${progress.percentage}%` }}
-            ></div>
-          </div>
-        </div>
-      </div>
-
-      {/* Patient Info Card */}
-      <div className="bg-white border border-[#E5E5E2] rounded-xl p-4 mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-[#5C6773]">Patient</p>
-          <p className="text-lg font-medium text-[#2A2F35]">{patient?.name}</p>
-        </div>
-        <div>
-          <p className="text-sm text-[#5C6773]">Tooth Number</p>
-          <p className="text-lg font-medium text-[#2A2F35]">#{implant?.tooth_number}</p>
-        </div>
-        <div>
-          <p className="text-sm text-[#5C6773]">Implant Type</p>
-          <p className="text-lg font-medium text-[#2A2F35]">{implant?.implant_type}</p>
-        </div>
-      </div>
-
-      {/* Clinical Photographs */}
-      <div className="bg-white border border-[#E5E5E2] rounded-xl p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-medium text-[#2A2F35]" style={{ fontFamily: 'Work Sans, sans-serif' }}>
-            <Camera size={24} className="inline mr-2" />
-            Clinical Photographs (Post-Op, Min. 1 Year)
+    <div className="flex h-screen bg-[#F9F9F8]" style={{ fontFamily: 'IBM Plex Sans, sans-serif' }}>
+      {/* Left Sidebar - Thumbnails */}
+      <div className="w-80 bg-white border-r border-[#E5E5E2] flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b border-[#E5E5E2]">
+          <button
+            onClick={() => navigate(`/patients/${patientId}`)}
+            className="flex items-center gap-2 text-[#5C6773] hover:text-[#82A098] mb-4 transition-colors"
+          >
+            <ArrowLeft size={20} />
+            Back to Patient
+          </button>
+          <h2 className="text-lg font-semibold text-[#2A2F35]" style={{ fontFamily: 'Work Sans, sans-serif' }}>
+            Medical Vault
           </h2>
-          <span className="text-sm text-[#5C6773]">8 slots required</span>
+          <p className="text-sm text-[#5C6773] mt-1">{patient?.name}</p>
         </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {PHOTO_VIEWS.map(view => {
-            const isUploaded = !!photos[view.id];
-            const isUploading = uploadingFiles[`photo_${view.id}`];
-            
-            return (
-              <div key={view.id} className="border border-[#E5E5E2] rounded-lg p-3">
-                <p className="text-xs text-[#5C6773] mb-2 min-h-[32px]">{view.label}</p>
-                {isUploaded ? (
-                  <div className="relative aspect-square bg-[#F0F0EE] rounded-lg overflow-hidden group">
-                    <img
-                      src={`${API_URL}/api/files/${photos[view.id].storage_path}`}
-                      alt={view.label}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center">
-                      <div className="absolute top-2 right-2 bg-[#82A098] text-white rounded-full p-1">
-                        <CheckCircle size={16} weight="fill" />
-                      </div>
-                    </div>
+
+        {/* Action Buttons */}
+        <div className="p-4 space-y-2 border-b border-[#E5E5E2]">
+          <button
+            onClick={() => {
+              setUploadType('photo');
+              setUploadDialogOpen(true);
+            }}
+            data-testid="add-photos-button"
+            className="w-full flex items-center gap-3 px-4 py-3 bg-[#82A098] hover:bg-[#6B8A82] text-white rounded-lg transition-colors"
+          >
+            <Plus size={20} weight="bold" />
+            <span className="font-medium">Add New Photos</span>
+          </button>
+          
+          <button
+            onClick={() => {
+              setUploadType('radiograph');
+              setUploadDialogOpen(true);
+            }}
+            data-testid="add-radiographs-button"
+            className="w-full flex items-center gap-3 px-4 py-3 bg-[#7B9EBB] hover:bg-[#6B8A9F] text-white rounded-lg transition-colors"
+          >
+            <Plus size={20} weight="bold" />
+            <span className="font-medium">Add New Radiographs</span>
+          </button>
+        </div>
+
+        {/* Date-wise Folders */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* Photos Section */}
+          {Object.keys(photosByDate).length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-[#5C6773] uppercase tracking-wider mb-3">
+                Clinical Photos
+              </h3>
+              {Object.entries(photosByDate).map(([date, photos]) => (
+                <div key={date} className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FolderOpen size={16} className="text-[#82A098]" />
+                    <span className="text-sm font-medium text-[#2A2F35]">{date}</span>
+                    <span className="text-xs text-[#5C6773]">({photos.length})</span>
                   </div>
-                ) : (
-                  <label className="aspect-square bg-[#F9F9F8] border-2 border-dashed border-[#E5E5E2] rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-[#82A098] hover:bg-white transition-all duration-200">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files[0]) {
-                          handleFileUpload(e.target.files[0], view.id, 'photo');
-                        }
-                      }}
-                      disabled={isUploading}
-                    />
-                    {isUploading ? (
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#82A098]"></div>
-                    ) : (
-                      <>
-                        <Upload size={24} className="text-[#5C6773] mb-2" />
-                        <span className="text-xs text-[#5C6773]">Upload</span>
-                      </>
-                    )}
-                  </label>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* OPG Radiographs */}
-      <div className="bg-white border border-[#E5E5E2] rounded-xl p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-medium text-[#2A2F35]" style={{ fontFamily: 'Work Sans, sans-serif' }}>
-            <Camera size={24} className="inline mr-2" />
-            OPG Radiographs (Min. 1 Year)
-          </h2>
-          <span className="text-sm text-[#5C6773]">4 slots required</span>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {RADIOGRAPH_VIEWS.map(view => {
-            const isUploaded = !!radiographs[view.id];
-            const isUploading = uploadingFiles[`radiograph_${view.id}`];
-            
-            return (
-              <div key={view.id} className="border border-[#E5E5E2] rounded-lg p-3">
-                <p className="text-xs text-[#5C6773] mb-2 min-h-[32px]">{view.label}</p>
-                {isUploaded ? (
-                  <div className="relative aspect-square bg-[#F0F0EE] rounded-lg overflow-hidden group">
-                    <img
-                      src={`${API_URL}/api/files/${radiographs[view.id].storage_path}`}
-                      alt={view.label}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center">
-                      <div className="absolute top-2 right-2 bg-[#82A098] text-white rounded-full p-1">
-                        <CheckCircle size={16} weight="fill" />
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-3 gap-2 ml-6">
+                    {photos.map((photo, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedItem({ type: 'photo', ...photo })}
+                        className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                          selectedItem?.id === photo.id && selectedItem?.type === 'photo'
+                            ? 'border-[#82A098] ring-2 ring-[#82A098]/30'
+                            : 'border-[#E5E5E2] hover:border-[#82A098]'
+                        }`}
+                      >
+                        <img
+                          src={`${API_URL}/api/files/${photo.storage_path}`}
+                          alt={photo.view_type}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <label className="aspect-square bg-[#F9F9F8] border-2 border-dashed border-[#E5E5E2] rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-[#82A098] hover:bg-white transition-all duration-200">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files[0]) {
-                          handleFileUpload(e.target.files[0], view.id, 'radiograph');
-                        }
-                      }}
-                      disabled={isUploading}
-                    />
-                    {isUploading ? (
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#82A098]"></div>
-                    ) : (
-                      <>
-                        <Upload size={24} className="text-[#5C6773] mb-2" />
-                        <span className="text-xs text-[#5C6773]">Upload</span>
-                      </>
-                    )}
-                  </label>
-                )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Radiographs Section */}
+          {Object.keys(radiographsByDate).length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-[#5C6773] uppercase tracking-wider mb-3">
+                Radiographs
+              </h3>
+              {Object.entries(radiographsByDate).map(([date, radiographs]) => (
+                <div key={date} className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FolderOpen size={16} className="text-[#7B9EBB]" />
+                    <span className="text-sm font-medium text-[#2A2F35]">{date}</span>
+                    <span className="text-xs text-[#5C6773]">({radiographs.length})</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 ml-6">
+                    {radiographs.map((radio, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedItem({ type: 'radiograph', ...radio })}
+                        className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                          selectedItem?.id === radio.id && selectedItem?.type === 'radiograph'
+                            ? 'border-[#7B9EBB] ring-2 ring-[#7B9EBB]/30'
+                            : 'border-[#E5E5E2] hover:border-[#7B9EBB]'
+                        }`}
+                      >
+                        <img
+                          src={`${API_URL}/api/files/${radio.storage_path}`}
+                          alt={radio.view_type}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {Object.keys(photosByDate).length === 0 && Object.keys(radiographsByDate).length === 0 && (
+            <div className="text-center py-12">
+              <Image size={48} className="mx-auto text-[#E5E5E2] mb-3" />
+              <p className="text-sm text-[#5C6773]">No photos or radiographs yet</p>
+              <p className="text-xs text-[#5C6773] mt-1">Click above to add files</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right Panel - Full View */}
+      <div className="flex-1 flex flex-col">
+        <div className="bg-white border-b border-[#E5E5E2] p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-[#2A2F35]">
+                {selectedItem ? (
+                  <>
+                    {selectedItem.type === 'photo' ? 'Clinical Photo' : 'Radiograph'} - 
+                    {' '}{selectedItem.view_type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </>
+                ) : 'No Image Selected'}
+              </h3>
+              {selectedItem && (
+                <p className="text-sm text-[#5C6773] mt-1">
+                  Tooth #{selectedItem.tooth_number} • {new Date(selectedItem.date).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+            {selectedItem && (
+              <div className="text-sm text-[#5C6773]">
+                {selectedItem.size ? `${Math.round(selectedItem.size / 1024)} KB` : ''}
               </div>
-            );
-          })}
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center p-8 bg-[#F0F0EE]">
+          {selectedItem ? (
+            <img
+              src={`${API_URL}/api/files/${selectedItem.storage_path}`}
+              alt={selectedItem.view_type}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+            />
+          ) : (
+            <div className="text-center">
+              <Image size={64} className="mx-auto text-[#E5E5E2] mb-4" />
+              <p className="text-[#5C6773]">Select an image from the sidebar to view</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex justify-between items-center">
-        <button
-          onClick={() => navigate(`/patients/${patientId}`)}
-          className="px-6 py-3 border border-[#E5E5E2] rounded-xl text-[#2A2F35] hover:bg-[#F9F9F8] transition-colors duration-200"
-        >
-          Save Draft
-        </button>
-        
-        <Button
-          onClick={handleSubmit}
-          data-testid="submit-vault-button"
-          className="px-8 py-3 bg-[#82A098] hover:bg-[#6B8A82] text-white rounded-xl"
-        >
-          Submit to Vault
-        </Button>
-      </div>
+      {/* Upload Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-semibold" style={{ fontFamily: 'Work Sans, sans-serif' }}>
+              {uploadType === 'photo' ? 'Add Clinical Photos' : 'Add Radiographs'}
+            </DialogTitle>
+          </DialogHeader>
 
-      {progress.uploaded < progress.total && (
-        <div className="mt-4 p-4 bg-[#E8A76C]/10 border border-[#E8A76C]/30 rounded-lg">
-          <p className="text-sm text-[#2A2F35]">
-            <strong>Note:</strong> Please upload all {progress.total} required files before submitting to vault.
-          </p>
-        </div>
-      )}
+          <div className="mt-4">
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-[#2A2F35] mb-2">
+                Date of Capture
+              </label>
+              <input
+                type="date"
+                value={uploadDate}
+                onChange={(e) => setUploadDate(e.target.value)}
+                className="px-4 py-2 bg-white border border-[#E5E5E2] rounded-lg focus:ring-2 focus:ring-[#82A098] focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {(uploadType === 'photo' ? PHOTO_VIEWS : RADIOGRAPH_VIEWS).map(view => {
+                const uploadKey = `${uploadType}_${view.id}`;
+                const isUploading = uploadingFiles[uploadKey];
+                
+                return (
+                  <div key={view.id} className="border border-[#E5E5E2] rounded-lg p-3">
+                    <p className="text-xs text-[#5C6773] mb-2 min-h-[32px]">{view.label}</p>
+                    <label className="aspect-square bg-[#F9F9F8] border-2 border-dashed border-[#E5E5E2] rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-[#82A098] hover:bg-white transition-all">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files[0]) {
+                            // For now, upload to first implant - in production, you'd select which implant
+                            handleFileUpload(e.target.files[0], view.id, 'temp_implant_id');
+                          }
+                        }}
+                        disabled={isUploading}
+                      />
+                      {isUploading ? (
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#82A098]"></div>
+                      ) : (
+                        <>
+                          <Upload size={24} className="text-[#5C6773] mb-2" />
+                          <span className="text-xs text-[#5C6773]">Upload</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+
+            <Button
+              onClick={() => setUploadDialogOpen(false)}
+              className="w-full mt-6 bg-[#82A098] hover:bg-[#6B8A82] text-white"
+            >
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

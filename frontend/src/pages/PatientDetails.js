@@ -527,6 +527,7 @@ const PatientDetails = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Dental Chart Grid */}
