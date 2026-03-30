@@ -24,7 +24,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="patients" element={<Patients />} />
             <Route path="patients/:id" element={<PatientDetails />} />
-            <Route path="patients/:patientId/implant/:implantId/vault" element={<MedicalVault />} />
+            <Route path="patients/:patientId/vault" element={<MedicalVault />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="clinics" element={<Clinics />} />
           </Route>

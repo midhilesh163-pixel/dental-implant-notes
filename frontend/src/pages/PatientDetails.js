@@ -212,19 +212,28 @@ const PatientDetails = () => {
           <h2 className="text-xl font-medium text-[#2A2F35]" style={{ fontFamily: 'Work Sans, sans-serif' }}>
             FDI Dental Chart
           </h2>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button 
-                data-testid="add-implant-button"
-                className="bg-[#82A098] hover:bg-[#6B8A82] text-white"
-              >
-                <Plus size={20} weight="bold" className="mr-2" />
-                Add Implant
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-3">
+            <Link
+              to={`/patients/${id}/vault`}
+              data-testid="medical-vault-button"
+              className="flex items-center gap-2 px-4 py-2 bg-[#7B9EBB] hover:bg-[#6B8A9F] text-white rounded-lg transition-colors duration-200"
+            >
+              <Camera size={20} weight="bold" />
+              Medical Vault
+            </Link>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => {
+              setIsDialogOpen(open);
+              if (!open) resetForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button 
+                  data-testid="add-implant-button"
+                  className="bg-[#82A098] hover:bg-[#6B8A82] text-white"
+                >
+                  <Plus size={20} weight="bold" className="mr-2" />
+                  Add Implant
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-2xl font-semibold" style={{ fontFamily: 'Work Sans, sans-serif' }}>
@@ -604,9 +613,6 @@ const PatientDetails = () => {
           <div className="space-y-4">
             {implants.map((implant) => {
               const daysRemaining = getDaysRemaining(implant.osseointegration_date);
-              const photoCount = implant.clinical_photos?.length || 0;
-              const radioCount = implant.radiographs?.length || 0;
-              const totalUploads = photoCount + radioCount;
               
               return (
                 <div 
@@ -628,28 +634,12 @@ const PatientDetails = () => {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
-                      {daysRemaining > 0 && (
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-[#E8A76C]">{daysRemaining} days</p>
-                          <p className="text-xs text-[#5C6773]">until osseointegration</p>
-                        </div>
-                      )}
-                      
-                      <Link
-                        to={`/patients/${id}/implant/${implant._id}/vault`}
-                        data-testid={`medical-vault-link-${implant._id}`}
-                        className="flex items-center gap-2 px-4 py-2 bg-[#7B9EBB] hover:bg-[#6B8A9F] text-white rounded-lg transition-colors duration-200 text-sm"
-                      >
-                        <Camera size={16} weight="bold" />
-                        Medical Vault
-                        {totalUploads > 0 && (
-                          <span className="ml-1 px-2 py-0.5 bg-white text-[#7B9EBB] rounded-full text-xs font-medium">
-                            {totalUploads}/12
-                          </span>
-                        )}
-                      </Link>
-                    </div>
+                    {daysRemaining > 0 && (
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-[#E8A76C]">{daysRemaining} days</p>
+                        <p className="text-xs text-[#5C6773]">until osseointegration</p>
+                      </div>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                     <div>
