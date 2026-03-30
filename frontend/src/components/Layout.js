@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { House, Users, ChartLine, Buildings, SignOut } from '@phosphor-icons/react';
+import { House, Users, ChartLine, Buildings, SignOut, CalendarCheck, ListChecks, ClockCounterClockwise, MagnifyingGlass } from '@phosphor-icons/react';
 
 const Layout = () => {
   const { user, logout } = useAuth();
@@ -17,6 +17,13 @@ const Layout = () => {
     { path: '/patients', label: 'Patients', icon: Users },
     { path: '/analytics', label: 'Analytics', icon: ChartLine },
     { path: '/clinics', label: 'Clinics', icon: Buildings }
+  ];
+
+  const footerItems = [
+    { path: '/', label: 'Cases', icon: House },
+    { path: '/patients', label: 'Patients', icon: Users },
+    { path: '/analytics', label: 'Timeline', icon: ClockCounterClockwise },
+    { path: '/clinics', label: 'Search', icon: MagnifyingGlass }
   ];
 
   return (
@@ -72,9 +79,34 @@ const Layout = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pb-20 md:pb-0">
         <Outlet />
       </main>
+
+      {/* Bottom Navigation - Mobile */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E5E2] md:hidden z-50">
+        <div className="flex items-center justify-around px-2 py-3">
+          {footerItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                data-testid={`footer-nav-${item.label.toLowerCase()}`}
+                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 ${
+                  isActive
+                    ? 'text-[#3B82F6]'
+                    : 'text-[#5C6773]'
+                }`}
+              >
+                <Icon size={24} weight={isActive ? 'fill' : 'regular'} />
+                <span className="text-xs font-medium">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 };
