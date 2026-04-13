@@ -161,6 +161,9 @@ class PatientCreate(BaseModel):
     email: Optional[str] = None
     address: Optional[str] = None
     medical_history: Optional[str] = None
+    profile_picture: Optional[str] = None
+    emergency_phone: Optional[str] = None
+    alternate_email: Optional[str] = None
 
 class ClinicCreate(BaseModel):
     name: str
@@ -374,15 +377,59 @@ async def get_patient(patient_id: str, request: Request):
 async def update_patient(patient_id: str, patient: PatientCreate, request: Request):
     user = await get_current_user(request)
     try:
-        result = await db.patients.update_one(
-            {"_id": ObjectId(patient_id), "doctor_id": user["_id"]},
-            {"$set": patient.model_dump()}
-        )
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Patient not found")
-        return {"message": "Patient updated successfully"}
-    except:
+        obj_id = ObjectId(patient_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid patient ID")
+    existing = await db.patients.find_one({"_id": obj_id, "doctor_id": user["_id"]})
+    if not existing:
         raise HTTPException(status_code=404, detail="Patient not found")
+    new_data = patient.model_dump()
+    # Compute which fields changed (skip profile_picture from diff)
+    tracked_fields = ["name", "age", "gender", "phone", "email", "address",
+                      "medical_history", "emergency_phone", "alternate_email"]
+    changes = []
+    for field in tracked_fields:
+        old_val = existing.get(field)
+        new_val = new_data.get(field)
+        if str(old_val or '') != str(new_val or ''):
+            changes.append({"field": field, "old": old_val, "new": new_val})
+    await db.patients.update_one({"_id": obj_id}, {"$set": new_data})
+    if changes:
+        await db.patient_edit_logs.insert_one({
+            "patient_id": patient_id,
+            "doctor_id": user["_id"],
+            "changed_at": datetime.now(timezone.utc),
+            "changes": changes,
+        })
+    return {"message": "Patient updated successfully"}
+
+@api_router.get("/patients/{patient_id}/edit-log")
+async def get_patient_edit_log(patient_id: str, request: Request):
+    user = await get_current_user(request)
+    logs = await db.patient_edit_logs.find(
+        {"patient_id": patient_id, "doctor_id": user["_id"]}
+    ).sort("changed_at", -1).to_list(50)
+    for log in logs:
+        log["_id"] = str(log["_id"])
+        log["changed_at"] = log["changed_at"].isoformat()
+    return logs
+
+@api_router.post("/patients/{patient_id}/profile-picture")
+async def upload_patient_profile_picture(patient_id: str, file: UploadFile = File(...), request: Request = None):
+    user = await get_current_user(request)
+    try:
+        obj_id = ObjectId(patient_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid patient ID")
+    patient = await db.patients.find_one({"_id": obj_id, "doctor_id": user["_id"]})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    path = f"{APP_NAME}/patients/{patient_id}/profile/{uuid.uuid4()}.{ext}"
+    data = await file.read()
+    put_object(path, data, file.content_type or "image/jpeg")
+    await db.patients.update_one({"_id": obj_id}, {"$set": {"profile_picture": path}})
+    return {"profile_picture": path}
 
 # Clinic Endpoints
 @api_router.post("/clinics")
@@ -565,6 +612,23 @@ async def get_fpd_records(request: Request, patient_id: Optional[str] = None):
     for r in records:
         r["_id"] = str(r["_id"])
     return records
+
+@api_router.put("/fpd-records/{record_id}")
+async def update_fpd_record(record_id: str, fpd: FPDCreate, request: Request):
+    user = await get_current_user(request)
+    try:
+        obj_id = ObjectId(record_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid record ID")
+    update_data = fpd.model_dump()
+    update_data.pop("patient_id", None)  # don't overwrite patient_id
+    result = await db.fpd_records.update_one(
+        {"_id": obj_id, "doctor_id": user["_id"]},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="FPD record not found or not yours")
+    return {"message": "FPD record updated successfully"}
 
 @api_router.delete("/fpd-records/{record_id}")
 async def delete_fpd_record(record_id: str, request: Request):

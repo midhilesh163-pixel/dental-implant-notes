@@ -248,8 +248,16 @@ const Patients = () => {
               className="bg-white border border-[#E5E5E2] rounded-xl p-6 shadow-sm hover:shadow-md hover:border-[#82A098] transition-all duration-200"
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-full bg-[#82A098] flex items-center justify-center text-white font-medium text-lg">
-                  {patient.name.charAt(0)}
+                <div className="w-12 h-12 rounded-full bg-[#82A098] flex items-center justify-center text-white font-medium text-lg overflow-hidden shrink-0">
+                  {patient.profile_picture ? (
+                    <img
+                      src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${patient.profile_picture}`}
+                      alt={patient.name}
+                      className="w-12 h-12 object-cover"
+                    />
+                  ) : (
+                    patient.name.charAt(0)
+                  )}
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                   patient.gender === 'Male' ? 'bg-blue-100 text-blue-700' :
