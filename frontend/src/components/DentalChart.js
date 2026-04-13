@@ -1,67 +1,72 @@
 import { useMemo, useState } from 'react';
 
 /*
-  DentalChart — matches user's PNG design exactly:
+  DentalChart layout (matching user's PSD sample exactly):
 
-  ┌─────────────────────────────────────────────┐
-  │  [+ missing teeth] [+ dental implant] [+ crowns/FDP]  │
-  │  UPPER TEETH  (roots up, grey crown at bottom)         │
-  │  18│17│16│15│14│13│12│11 ║ 21│22│23│24│25│26│27│28   │  ← blue boxes
-  │──────────────────────────────────────────────────────  │  ← dividing line
-  │  48│47│46│45│44│43│42│41 ║ 31│32│33│34│35│36│37│38   │  ← blue boxes
-  │  LOWER TEETH  (grey crown at top, roots down)          │
-  └─────────────────────────────────────────────┘
+  PAD_TOP
+  ┌─ UPPER ROOT zone  (roots point UP, away from number row)
+  ├─ UPPER CROWN zone (crowns touch the number row FROM ABOVE)
+  ├─ [18][17]...[11] | [21]...[28]   ← blue number boxes
+  ══════════════════════════════════  ← dividing line
+  ├─ [48][47]...[41] | [31]...[38]   ← blue number boxes
+  ├─ LOWER CROWN zone (crowns touch the number row FROM BELOW)
+  └─ LOWER ROOT zone  (roots point DOWN, away from number row)
 
-  Action mode (set by buttons):
-    'missing'  → clicking a tooth marks it missing
-    'implant'  → clicking a tooth opens implant log
-    'crown'    → clicking a tooth opens crown/FPD log
+  Per tooth we have 3 separate PNGs:
+    tooth_N.png  — full natural tooth (root+crown together, for healthy state)
+    crown_N.png  — crown only (natural grey crown)
+    root_N.png   — root only
+    fpd_N.png    — FPD/crown-on-implant (green crown, same size as crown_N)
+    implant_upper/lower.png — implant screw
+
+  For implant teeth: show root zone = implant screw, crown zone = fpd or crown png
+  Gap between crown and implant MUST be zero — they share the same junction line.
 */
 
-/* ── LAYOUT ── */
-const SLOT  = 52;
-const GAP   = 18;
-const LM    = 18;
-const IMG_H = 188;
-const NUM_H = 26;   // height of each number row
+/* ── LAYOUT CONSTANTS ── */
+const SLOT   = 54;          // width per tooth slot
+const GAP    = 20;          // midline gap between quadrants
+const LM     = 16;          // left/right margin
+const CROWN_H = 44;         // crown zone height (matches crown PNG ~42px)
+const ROOT_H  = 60;         // root zone height  (matches root PNG ~55px)
+const NUM_H   = 26;         // number box row height
+const PAD     = 8;          // top/bottom padding
 
-const PAD_TOP = 6;
-const UY      = PAD_TOP;                  // upper image top
-const NUM_U_Y = UY + IMG_H;              // upper number row top
-const DIV_Y   = NUM_U_Y + NUM_H;         // dividing line / lower number row top
-const NUM_L_Y = DIV_Y;                   // lower number row top
-const LY      = NUM_L_Y + NUM_H;         // lower image top
-const LEGEND_Y = LY + IMG_H + 10;
+/* Vertical positions — upper arch, crown touches number row from above */
+const U_ROOT_Y  = PAD;                        // upper root zone top
+const U_CROWN_Y = U_ROOT_Y + ROOT_H;         // upper crown zone top (root above)
+const U_NUM_Y   = U_CROWN_Y + CROWN_H;       // upper number row top
+const DIV_Y     = U_NUM_Y + NUM_H;           // dividing line y
+const L_NUM_Y   = DIV_Y;                     // lower number row top
+const L_CROWN_Y = L_NUM_Y + NUM_H;           // lower crown zone top (crown below numbers)
+const L_ROOT_Y  = L_CROWN_Y + CROWN_H;       // lower root zone top
+const LEGEND_Y  = L_ROOT_Y + ROOT_H + 12;
 
 const W = SLOT * 16 + GAP + LM * 2;
-const H = LEGEND_Y + 22;
+const H = LEGEND_Y + 20;
 
-/* Slot X */
+/* Slot X position for any FDI tooth number */
 function slotX(n) {
   const q = Math.floor(n / 10), u = n % 10;
-  if (q === 1) return LM + (8 - u) * SLOT;
-  if (q === 2) return LM + 8 * SLOT + GAP + (u - 1) * SLOT;
-  if (q === 3) return LM + 8 * SLOT + GAP + (u - 1) * SLOT;
-  if (q === 4) return LM + (8 - u) * SLOT;
+  if (q === 1) return LM + (8 - u) * SLOT;            // 18→0, 11→7
+  if (q === 2) return LM + 8 * SLOT + GAP + (u - 1) * SLOT; // 21→8, 28→15
+  if (q === 3) return LM + 8 * SLOT + GAP + (u - 1) * SLOT; // 31→8, 38→15
+  if (q === 4) return LM + (8 - u) * SLOT;            // 48→0, 41→7
   return 0;
 }
-const sCX  = n => slotX(n) + SLOT / 2;
-const isUp = n => Math.floor(n / 10) <= 2;
+const slotCX = n => slotX(n) + SLOT / 2;
+const isUpper = n => Math.floor(n / 10) <= 2;
 
 const UPPER = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
 const LOWER = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38];
 
-/* Crown/root split for implant */
-const CROWN_H = Math.round(IMG_H * 0.40);
-const ROOT_H  = IMG_H - CROWN_H;
-
-/* Condition config */
+/* Condition tint config */
 const COND = {
-  healthy:        { show: true,  tint: null,                    badge: null },
-  missing:        { show: false, tint: null,                    badge: null },
-  rootStump:      { show: true,  tint: 'rgba(160,100,50,0.42)', badge: 'RS' },
-  grosslyDecayed: { show: true,  tint: 'rgba(80,55,35,0.44)',   badge: 'GD' },
-  fractured:      { show: true,  tint: 'rgba(200,50,40,0.40)',  badge: 'F'  },
+  healthy:        { tint: null,                    badge: null },
+  missing:        { tint: null,                    badge: null },
+  rootStump:      { tint: 'rgba(160,100,50,0.45)', badge: 'RS' },
+  grosslyDecayed: { tint: 'rgba(80,55,35,0.48)',   badge: 'GD' },
+  fractured:      { tint: 'rgba(200,50,40,0.42)',  badge: 'F'  },
 };
 
 /* ── MAIN COMPONENT ── */
@@ -74,9 +79,9 @@ export default function DentalChart({
   onCrownLog,
   selectedTeeth   = [],
   onToothToggle,
-  mode            = 'view',     // 'view' | 'fpd'
+  mode            = 'view',
 }) {
-  const [actionMode, setActionMode] = useState(null); // 'missing'|'implant'|'crown'|null
+  const [actionMode, setActionMode] = useState(null);
   const [hov, setHov] = useState(null);
 
   const impMap = useMemo(() => {
@@ -93,35 +98,35 @@ export default function DentalChart({
 
   const handleToothClick = n => {
     if (mode === 'fpd') { onToothToggle?.(n); return; }
-    if (actionMode === 'missing') { onMarkMissing?.(n); }
-    else if (actionMode === 'implant') { onImplantLog?.(n); }
-    else if (actionMode === 'crown') { onCrownLog?.(n); }
+    if (actionMode === 'missing') onMarkMissing?.(n);
+    else if (actionMode === 'implant') onImplantLog?.(n);
+    else if (actionMode === 'crown') onCrownLog?.(n);
   };
 
   const toggleAction = key => setActionMode(prev => prev === key ? null : key);
 
-  /* FPD bridge connector */
+  /* FPD bridge bar connecting pontic teeth */
   const bridgeOverlays = fpdRecords
     .filter(f => f.tooth_numbers?.length > 1)
     .map((f, idx) => {
       const sorted = [...f.tooth_numbers].sort((a, b) => slotX(a) - slotX(b));
-      const up = isUp(sorted[0]);
-      const x1 = slotX(sorted[0]) + 2;
-      const x2 = slotX(sorted[sorted.length - 1]) + SLOT - 2;
-      const jY = up ? UY + ROOT_H : LY + CROWN_H;
+      const up = isUpper(sorted[0]);
+      const x1 = slotX(sorted[0]) + 3;
+      const x2 = slotX(sorted[sorted.length - 1]) + SLOT - 3;
+      // Bridge bar sits at crown/root junction line
+      const barY = up ? U_CROWN_Y : L_CROWN_Y + CROWN_H;
       return (
-        <rect key={idx} x={x1} y={jY - 3} width={x2 - x1} height={9}
-          rx={4} fill="rgba(120,170,210,0.82)" stroke="#5B9BBD" strokeWidth={1}
+        <rect key={idx} x={x1} y={barY - 4} width={x2 - x1} height={8}
+          rx={3} fill="rgba(100,180,120,0.75)" stroke="#3a9e5a" strokeWidth={1}
           style={{ pointerEvents: 'none' }} />
       );
     });
 
-  /* Render one tooth */
+  /* Render one tooth slot */
   const renderTooth = n => {
-    const up   = isUp(n);
-    const sx   = slotX(n);
-    const scx  = sCX(n);
-    const imgY = up ? UY : LY;
+    const up  = isUpper(n);
+    const sx  = slotX(n);
+    const scx = slotCX(n);
 
     const imp       = impMap[n];
     const fpd       = fpdMap[n];
@@ -129,122 +134,144 @@ export default function DentalChart({
     const condition = tc.condition || 'healthy';
     const cfg       = COND[condition] || COND.healthy;
 
-    const isSel    = selectedTeeth.includes(n);
-    const isHov    = hov === n;
-    const hasImp   = !!imp;
-    const hasCrown = !!(fpd || imp?.prosthetic_loading_date);
-    const isMissing = condition === 'missing';
+    const isMissing  = condition === 'missing';
+    const hasImp     = !!imp;
+    const hasFpd     = !!fpd;
+    const hasCrownOnImp = hasImp && !!imp.prosthetic_loading_date;
+    const isSel      = selectedTeeth.includes(n);
+    const isHov      = hov === n;
 
-    /* Zone positions */
-    const rootY  = up ? imgY           : imgY + CROWN_H;
-    const crownY = up ? imgY + ROOT_H  : imgY;
-    const rootW  = SLOT * 0.58;
-    const rootX  = scx - rootW / 2;
+    /* Zone top-Y for crown and root in this arch */
+    const crownY = up ? U_CROWN_Y : L_CROWN_Y;
+    const rootY  = up ? U_ROOT_Y  : L_ROOT_Y;
 
-    const implantSrc = up ? '/teeth/implant_upper.png' : '/teeth/implant_lower.png';
+    /* Image sources */
     const toothSrc   = `/teeth/tooth_${n}.png`;
     const crownSrc   = `/teeth/crown_${n}.png`;
+    const rootSrc    = `/teeth/root_${n}.png`;
+    const fpdSrc     = `/teeth/fpd_${n}.png`;
+    const implantSrc = up ? '/teeth/implant_upper.png' : '/teeth/implant_lower.png';
 
-    /* Number box colour */
-    const numBg = hasImp  ? '#0369A1'
-      : hasCrown ? '#4338CA'
+    /* Number box background */
+    const numBg = hasImp    ? '#0369A1'
+      : hasFpd   ? '#16A34A'
       : isMissing ? '#6B7280'
       : '#1E40AF';
 
-    /* Highlight ring when this tooth is active action target */
-    const showRing = isHov && actionMode !== null && !isMissing;
+    /* Hover ring colour */
+    const ringColor = actionMode === 'missing' ? '#EF4444'
+      : actionMode === 'implant' ? '#0369A1'
+      : '#16A34A';
+
+    /* Total slot height for rings */
+    const slotTop = up ? U_ROOT_Y : L_CROWN_Y;
+    const slotH   = ROOT_H + CROWN_H;
 
     return (
       <g key={n}
         onClick={() => handleToothClick(n)}
         onMouseEnter={() => setHov(n)}
         onMouseLeave={() => setHov(null)}
-        style={{ cursor: actionMode ? 'crosshair' : 'pointer' }}
+        style={{ cursor: actionMode || mode === 'fpd' ? 'crosshair' : 'pointer' }}
         data-testid={`fdi-tooth-${n}`}
       >
         {/* Hover ring */}
-        {showRing && (
-          <rect x={sx + 1} y={imgY + 1} width={SLOT - 2} height={IMG_H - 2}
-            rx={5} fill="none"
-            stroke={
-              actionMode === 'missing' ? '#EF4444'
-              : actionMode === 'implant' ? '#0369A1'
-              : '#16A34A'
-            }
-            strokeWidth={2}
-          />
+        {isHov && actionMode && !isMissing && (
+          <rect x={sx + 1} y={slotTop + 1} width={SLOT - 2} height={slotH - 2}
+            rx={5} fill="none" stroke={ringColor} strokeWidth={2} />
         )}
-        {/* FPD selected ring */}
+        {/* FPD selection ring */}
         {isSel && (
-          <rect x={sx + 1} y={imgY + 1} width={SLOT - 2} height={IMG_H - 2}
-            rx={5} fill="rgba(99,102,241,0.10)" stroke="#4338CA" strokeWidth={2} />
+          <rect x={sx + 1} y={slotTop + 1} width={SLOT - 2} height={slotH - 2}
+            rx={5} fill="rgba(34,197,94,0.08)" stroke="#16A34A" strokeWidth={2} />
         )}
 
-        {/* ── TOOTH IMAGE ── */}
+        {/* ── TOOTH RENDERING ── */}
         {isMissing ? (
-          /* Empty ghost */
-          <rect x={sx + 10} y={imgY + 12} width={SLOT - 20} height={IMG_H - 24}
-            rx={5} fill="rgba(200,210,218,0.15)"
-            stroke="rgba(150,165,178,0.28)" strokeWidth={1} strokeDasharray="3,3" />
+          /* Ghost outline only */
+          <rect x={sx + 8} y={slotTop + 6} width={SLOT - 16} height={slotH - 12}
+            rx={6} fill="rgba(200,210,218,0.12)"
+            stroke="rgba(150,165,178,0.30)" strokeWidth={1} strokeDasharray="3,3" />
 
         ) : hasImp ? (
+          /* ── IMPLANT: screw in root zone, crown/fpd in crown zone, NO GAP ── */
           <>
-            {/* Implant screw — root zone, platform snaps to crown junction */}
+            {/* Implant screw fills root zone exactly */}
             <image href={implantSrc}
-              x={rootX} y={rootY} width={rootW} height={ROOT_H}
-              preserveAspectRatio={up ? 'xMidYMax meet' : 'xMidYMin meet'} />
-            {/* Crown — crown zone */}
-            {hasCrown && (
-              <image href={crownSrc}
+              x={sx + 6} y={rootY} width={SLOT - 12} height={ROOT_H}
+              preserveAspectRatio="xMidYMid meet" />
+            {/* Crown/FPD sits flush against number row */}
+            {(hasCrownOnImp || hasFpd) ? (
+              <image href={hasFpd ? fpdSrc : crownSrc}
                 x={sx + 2} y={crownY} width={SLOT - 4} height={CROWN_H}
-                preserveAspectRatio={up ? 'xMidYMin meet' : 'xMidYMax meet'} />
-            )}
-            {!hasCrown && (
-              <line x1={rootX} y1={up ? rootY + ROOT_H : rootY}
-                x2={rootX + rootW} y2={up ? rootY + ROOT_H : rootY}
-                stroke="#5B9BBD" strokeWidth={1.5} strokeDasharray="3,2"
+                preserveAspectRatio="xMidYMid meet" />
+            ) : (
+              /* No crown yet — dashed line at junction */
+              <line
+                x1={sx + 6} y1={up ? crownY : rootY}
+                x2={sx + SLOT - 6} y2={up ? crownY : rootY}
+                stroke="#5B9BBD" strokeWidth={1.5} strokeDasharray="4,3"
                 style={{ pointerEvents: 'none' }} />
             )}
           </>
 
-        ) : hasCrown ? (
-          <image href={crownSrc}
-            x={sx + 2} y={crownY} width={SLOT - 4} height={CROWN_H}
-            preserveAspectRatio={up ? 'xMidYMin meet' : 'xMidYMax meet'} />
+        ) : hasFpd ? (
+          /* ── FPD CROWN ONLY (no implant): green crown + natural root ── */
+          <>
+            <image href={rootSrc}
+              x={sx + 4} y={rootY} width={SLOT - 8} height={ROOT_H}
+              preserveAspectRatio="xMidYMid meet" />
+            <image href={fpdSrc}
+              x={sx + 2} y={crownY} width={SLOT - 4} height={CROWN_H}
+              preserveAspectRatio="xMidYMid meet" />
+            {cfg.tint && (
+              <rect x={sx + 2} y={rootY} width={SLOT - 4} height={slotH}
+                rx={4} fill={cfg.tint} style={{ pointerEvents: 'none' }} />
+            )}
+          </>
 
         ) : (
-          /* Natural tooth — crown anchored to number row */
+          /* ── NATURAL TOOTH: full tooth PNG, split into root+crown for alignment ── */
           <>
-            <image href={toothSrc}
-              x={sx + 1} y={imgY} width={SLOT - 2} height={IMG_H}
-              preserveAspectRatio={up ? 'xMidYMax meet' : 'xMidYMin meet'}
-              opacity={cfg.show ? 1 : 0}
+            {/* Root part — anchored to root zone */}
+            <image href={rootSrc}
+              x={sx + 4} y={rootY} width={SLOT - 8} height={ROOT_H}
+              preserveAspectRatio="xMidYMid meet"
+              opacity={condition === 'healthy' ? 1 : 0.85}
             />
+            {/* Crown part — flush against number row */}
+            <image href={crownSrc}
+              x={sx + 2} y={crownY} width={SLOT - 4} height={CROWN_H}
+              preserveAspectRatio="xMidYMid meet"
+              opacity={condition === 'healthy' ? 1 : 0.85}
+            />
+            {/* Condition tint overlay */}
             {cfg.tint && (
-              <rect x={sx + 1} y={imgY} width={SLOT - 2} height={IMG_H}
-                rx={4} fill={cfg.tint} opacity={0.55}
-                style={{ pointerEvents: 'none' }} />
+              <rect x={sx + 2} y={slotTop} width={SLOT - 4} height={slotH}
+                rx={4} fill={cfg.tint} style={{ pointerEvents: 'none' }} />
             )}
+            {/* Condition badge */}
             {cfg.badge && (
-              <text x={scx} y={imgY + IMG_H * 0.5 + 5}
-                textAnchor="middle" fontSize={13} fontWeight="800"
+              <text x={scx} y={slotTop + slotH / 2 + 5}
+                textAnchor="middle" fontSize={12} fontWeight="800"
                 fill="#7C2D12" fontFamily="'IBM Plex Sans',sans-serif"
-                style={{ userSelect: 'none', pointerEvents: 'none' }}>{cfg.badge}</text>
+                style={{ userSelect: 'none', pointerEvents: 'none' }}
+              >{cfg.badge}</text>
             )}
           </>
         )}
 
-        {/* Number box */}
+        {/* ── NUMBER BOX ── */}
         {(() => {
-          const ny = up ? NUM_U_Y : NUM_L_Y;
+          const ny = up ? U_NUM_Y : L_NUM_Y;
           return (
             <g style={{ pointerEvents: 'none' }}>
               <rect x={sx + 1} y={ny + 3} width={SLOT - 2} height={NUM_H - 6}
                 rx={3} fill={numBg} />
               <text x={scx} y={ny + NUM_H - 9}
-                textAnchor="middle" fontSize={9.5}
+                textAnchor="middle" fontSize={10}
                 fontFamily="'IBM Plex Mono',monospace"
-                fill="#FFFFFF" fontWeight="600"
+                fill="#FFFFFF" fontWeight="700"
                 style={{ userSelect: 'none' }}>{n}</text>
             </g>
           );
@@ -253,13 +280,13 @@ export default function DentalChart({
     );
   };
 
-  /* Button style helper */
-  const btnStyle = (key, color, activeColor) => ({
+  /* Button style */
+  const btnStyle = (key, base, active) => ({
     padding: '6px 14px',
     borderRadius: 6,
-    border: `1.5px solid ${actionMode === key ? activeColor : color}`,
-    background: actionMode === key ? activeColor : '#F9F9F8',
-    color: actionMode === key ? '#fff' : color,
+    border: `1.5px solid ${actionMode === key ? active : base}`,
+    background: actionMode === key ? active : '#F9F9F8',
+    color: actionMode === key ? '#fff' : base,
     fontWeight: 600,
     fontSize: 12,
     cursor: 'pointer',
@@ -269,49 +296,47 @@ export default function DentalChart({
 
   return (
     <div style={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E5E5E2', overflow: 'hidden' }}>
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 10, padding: '10px 14px 8px', borderBottom: '1px solid #F0EDE8', flexWrap: 'wrap' }}>
-        <button
-          data-testid="action-missing"
-          style={btnStyle('missing', '#2563EB', '#2563EB')}
-          onClick={() => toggleAction('missing')}
-        >+ missing teeth</button>
-        <button
-          data-testid="action-implant"
-          style={btnStyle('implant', '#64748B', '#475569')}
-          onClick={() => toggleAction('implant')}
-        >+ dental implant</button>
-        <button
-          data-testid="action-crown"
-          style={btnStyle('crown', '#16A34A', '#16A34A')}
-          onClick={() => toggleAction('crown')}
-        >+ crowns/FDP</button>
-        {actionMode && (
-          <span style={{ fontSize: 11, color: '#9CA3AF', alignSelf: 'center', marginLeft: 4 }}>
-            {actionMode === 'missing' && 'Click a tooth to mark as missing'}
-            {actionMode === 'implant' && 'Click a tooth to log an implant'}
-            {actionMode === 'crown'   && 'Click a tooth to log a crown / FPD'}
-          </span>
-        )}
-      </div>
+
+      {/* Action buttons — hidden in fpd selection mode */}
+      {mode !== 'fpd' && (
+        <div style={{ display: 'flex', gap: 10, padding: '10px 14px 8px', borderBottom: '1px solid #F0EDE8', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button data-testid="action-missing"
+            style={btnStyle('missing', '#2563EB', '#2563EB')}
+            onClick={() => toggleAction('missing')}>+ missing teeth</button>
+          <button data-testid="action-implant"
+            style={btnStyle('implant', '#64748B', '#0369A1')}
+            onClick={() => toggleAction('implant')}>+ dental implant</button>
+          <button data-testid="action-crown"
+            style={btnStyle('crown', '#16A34A', '#16A34A')}
+            onClick={() => toggleAction('crown')}>+ crowns/FDP</button>
+          {actionMode && (
+            <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 4 }}>
+              {actionMode === 'missing' && 'Click a tooth to mark missing'}
+              {actionMode === 'implant' && 'Click a tooth to log an implant'}
+              {actionMode === 'crown'   && 'Click a tooth to log a crown / FPD'}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* SVG chart */}
       <div style={{ overflowX: 'auto' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', minWidth: 560 }}
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%"
+          style={{ display: 'block', minWidth: 600 }}
           aria-label="FDI Dental Chart">
 
           <rect width={W} height={H} fill="#FFFFFF" />
 
-          {/* Midline vertical */}
-          <line x1={LM + 8 * SLOT + GAP / 2} y1={UY}
-            x2={LM + 8 * SLOT + GAP / 2} y2={LY + IMG_H}
+          {/* Midline vertical dashed */}
+          <line x1={LM + 8 * SLOT + GAP / 2} y1={PAD}
+            x2={LM + 8 * SLOT + GAP / 2} y2={L_ROOT_Y + ROOT_H}
             stroke="#D0C8BC" strokeWidth={1} strokeDasharray="4,4" />
 
-          {/* Horizontal dividing line between upper & lower number rows */}
+          {/* Horizontal dividing line between arch number rows */}
           <line x1={LM} y1={DIV_Y} x2={W - LM} y2={DIV_Y}
-            stroke="#C0B8A8" strokeWidth={1.5} />
+            stroke="#B0A898" strokeWidth={1.5} />
 
-          {/* FPD connectors */}
+          {/* FPD bridge connectors */}
           {bridgeOverlays}
 
           {/* All 32 teeth */}
@@ -320,16 +345,16 @@ export default function DentalChart({
 
           {/* Legend */}
           {[
-            { color: '#F5F3EE', border: '#C0B8A8', label: 'Healthy' },
-            { color: '#4A5C62', border: '#2E3A3E', label: 'Implant' },
-            { color: '#B8D4E8', border: '#5B9BBD', label: 'Crown/FPD' },
-            { color: 'rgba(195,208,218,0.3)', border: 'rgba(150,165,178,0.45)', label: 'Missing', dashed: true },
+            { color: '#F0EDE8', border: '#C0B8A8', label: 'Healthy' },
+            { color: '#0369A1', border: '#024f7c', label: 'Implant' },
+            { color: '#16A34A', border: '#0f7234', label: 'Crown/FPD' },
+            { color: 'rgba(195,208,218,0.25)', border: '#9CA3AF', label: 'Missing', dashed: true },
           ].map(({ color, border, label, dashed }, i) => (
-            <g key={label} transform={`translate(${LM + i * 138} ${LEGEND_Y})`}>
-              <rect width={13} height={13} rx={3}
-                fill={color} stroke={border} strokeWidth={1.2}
+            <g key={label} transform={`translate(${LM + i * 130} ${LEGEND_Y})`}>
+              <rect width={12} height={12} rx={2}
+                fill={color} stroke={border} strokeWidth={1}
                 strokeDasharray={dashed ? '2,2' : undefined} />
-              <text x={19} y={11} fontSize={9} fill="#5C6370"
+              <text x={17} y={10} fontSize={9} fill="#5C6370"
                 fontFamily="'IBM Plex Sans',sans-serif">{label}</text>
             </g>
           ))}
