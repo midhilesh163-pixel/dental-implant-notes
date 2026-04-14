@@ -12,6 +12,7 @@ import Analytics from './pages/Analytics';
 import Clinics from './pages/Clinics';
 import Account from './pages/Account';
 import Backup from './pages/Backup';
+import Subscription from './pages/Subscription';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
@@ -31,6 +32,7 @@ function App() {
             <Route path="clinics" element={<Clinics />} />
             <Route path="account" element={<Account />} />
             <Route path="backup" element={<Backup />} />
+            <Route path="subscription" element={<Subscription />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

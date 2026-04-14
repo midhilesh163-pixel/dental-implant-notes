@@ -1,6 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { House, Users, ChartLine, Buildings, SignOut, ClockCounterClockwise, MagnifyingGlass, UserCircle, GearSix, CloudArrowUp } from '@phosphor-icons/react';
+import { House, Users, ChartLine, Buildings, SignOut, ClockCounterClockwise, MagnifyingGlass, UserCircle, GearSix, CloudArrowUp, Crown } from '@phosphor-icons/react';
+import AdBanner from './AdBanner';
 import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
 import {
   DropdownMenu,
@@ -27,6 +28,7 @@ const Layout = () => {
     { path: '/analytics', label: 'Analytics', icon: ChartLine },
     { path: '/clinics', label: 'Clinics', icon: Buildings },
     { path: '/backup', label: 'Backup', icon: CloudArrowUp },
+    { path: '/subscription', label: 'Subscription', icon: Crown },
   ];
 
   const footerItems = [
@@ -139,6 +141,9 @@ const Layout = () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
+
+        {/* Ad Banner */}
+        <AdBanner onNavigate={(path) => navigate(path)} />
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto pb-20 md:pb-0">

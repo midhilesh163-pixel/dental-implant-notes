@@ -335,6 +335,60 @@ async def get_me(request: Request):
     user = await get_current_user(request)
     return user
 
+# Subscription plan limits (storage in MB)
+PLAN_STORAGE = { "free": 500, "pro": 5120, "clinic": 20480 }
+
+@api_router.get("/subscription/status")
+async def get_subscription_status(request: Request):
+    user = await get_current_user(request)
+    plan = user.get("plan_type", "free")
+    plan_end = user.get("plan_end")
+
+    # Calculate storage used: sum file sizes in uploads/dentalhub/
+    uid = user["_id"]
+    used_bytes = 0
+    patient_ids = [str(p["_id"]) async for p in db.patients.find({"doctor_id": uid}, {"_id": 1})]
+    implant_ids = [str(i["_id"]) async for i in db.implants.find({"doctor_id": uid}, {"_id": 1})]
+
+    # Sum clinical photo/radiograph sizes stored in implant docs
+    async for imp in db.implants.find({"doctor_id": uid}):
+        for ph in imp.get("clinical_photos", []):
+            used_bytes += ph.get("size", 0)
+        for rg in imp.get("radiographs", []):
+            used_bytes += rg.get("size", 0)
+
+    # Sum extra patient photos
+    async for ph in db.patient_photos.find({"doctor_id": uid}):
+        used_bytes += ph.get("size", 0)
+
+    used_mb = round(used_bytes / (1024 * 1024), 2)
+    limit_mb = PLAN_STORAGE.get(plan, 500)
+
+    return {
+        "plan": plan,
+        "plan_end": plan_end.isoformat() if hasattr(plan_end, "isoformat") else plan_end,
+        "used_mb": used_mb,
+        "limit_mb": limit_mb,
+        "used_pct": round(min(used_mb / limit_mb * 100, 100), 1) if limit_mb else 0,
+    }
+
+@api_router.post("/subscription/upgrade")
+async def upgrade_subscription(request: Request):
+    """Simulate plan upgrade — in production this would go through a payment gateway."""
+    user = await get_current_user(request)
+    body = await request.json()
+    plan = body.get("plan", "free")
+    billing = body.get("billing", "monthly")  # 'monthly' | 'yearly'
+    if plan not in PLAN_STORAGE:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    months = 1 if billing == "monthly" else 12
+    plan_end = datetime.now(timezone.utc) + timedelta(days=30 * months)
+    await db.users.update_one(
+        {"_id": ObjectId(user["_id"])},
+        {"$set": {"plan_type": plan, "plan_billing": billing, "plan_end": plan_end}}
+    )
+    return {"message": f"Upgraded to {plan} ({billing})", "plan_end": plan_end.isoformat()}
+
 @api_router.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
