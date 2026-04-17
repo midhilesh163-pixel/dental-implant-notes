@@ -3,7 +3,7 @@ import axios from 'axios';
 import { X, Megaphone } from '@phosphor-icons/react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
-const SESSION_KEY = 'dentalhub_extad_dismissed';
+const SESSION_KEY = 'osiolog_extad_dismissed';
 
 export default function ExternalAdBanner() {
   const [ads, setAds] = useState([]);

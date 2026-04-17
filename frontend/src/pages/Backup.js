@@ -14,7 +14,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 */
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-const BACKUP_FILENAME = 'dentalhub_backup.json';
+const BACKUP_FILENAME = 'osiolog_backup.json';
 
 /* ── Helpers ── */
 function getGoogleToken() {
@@ -135,7 +135,7 @@ export default function Backup() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `dentalhub_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `osiolog_backup_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success('Backup downloaded to your device');
@@ -191,7 +191,7 @@ export default function Backup() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target.result);
-        if (!parsed.version) throw new Error('Not a valid DentalHub backup file');
+        if (!parsed.version) throw new Error('Not a valid OSIOLOG backup file');
         setRestorePreview({ data: parsed, source: file.name, modifiedTime: parsed.exported_at });
         toast.success('Backup loaded — review below and confirm restore');
       } catch {

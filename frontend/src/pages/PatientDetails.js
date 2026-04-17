@@ -71,6 +71,59 @@ const INITIAL_FPD = {
   warranty_image: null,
 };
 
+const ABUTMENT_TYPES = [
+  'Stock Abutment Straight',
+  'Stock Abutment Angled 15°',
+  'Stock Abutment Angled 17°',
+  'Stock Abutment Angled 25°',
+  'Multi-Unit Abutment (MUA) Straight',
+  'MUA Angled 15°',
+  'MUA Angled 17°',
+  'MUA Angled 25°',
+  'MUA Angled 30°',
+  'MUA Angled 35°',
+  'MUA Angled 40°',
+  'MUA Angled 45°',
+  'MUA Angled 50°',
+  'MUA Angled 60°',
+  'Ball Abutment',
+  'Locator Abutment',
+  'Custom Milled Abutment',
+  'UCLA Abutment',
+  'Ti Base',
+];
+
+const INITIAL_ABUTMENT = {
+  tooth_number: '',
+  abutment_type: 'Stock Abutment Straight',
+  connected_implant_ids: [],
+  placement_date: '',
+  clinical_notes: '',
+  clinic_id: '',
+};
+
+const OVERDENTURE_ATTACHMENTS = [
+  'Ball Attachment',
+  'Locator / LOCATOR R-Tx',
+  'Bar Clip (Dolder Bar)',
+  'Bar Clip (Hader Bar)',
+  'Magnetic Attachment',
+  'ERA Attachment',
+  'Ceka Attachment',
+  'Custom Bar',
+];
+
+const INITIAL_OVERDENTURE = {
+  tooth_numbers: [],
+  attachment_type: 'Ball Attachment',
+  connected_implant_ids: [],
+  has_bar: false,
+  bar_material: '',
+  prosthetic_loading_date: '',
+  clinical_notes: '',
+  clinic_id: '',
+};
+
 const PatientDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -87,6 +140,14 @@ const PatientDetails = () => {
   const [editingFpdId, setEditingFpdId] = useState(null);
   const [warrantyFile, setWarrantyFile] = useState(null);
   const [missingConfirm, setMissingConfirm] = useState(null); // { toothNumber, action: 'mark'|'revert' }
+  const [abutmentRecords, setAbutmentRecords] = useState([]);
+  const [overdentureRecords, setOverdentureRecords] = useState([]);
+  const [isAbutmentOpen, setIsAbutmentOpen] = useState(false);
+  const [isOverdentureOpen, setIsOverdentureOpen] = useState(false);
+  const [abutmentData, setAbutmentData] = useState({ ...INITIAL_ABUTMENT });
+  const [overdentureData, setOverdentureData] = useState({ ...INITIAL_OVERDENTURE });
+  const [editingAbutmentId, setEditingAbutmentId] = useState(null);
+  const [editingOverdentureId, setEditingOverdentureId] = useState(null);
   const [clinics, setClinics] = useState([]);
   const [toothConditions, setToothConditions] = useState({});
   const [isEditPatientOpen, setIsEditPatientOpen] = useState(false);
@@ -102,16 +163,20 @@ const PatientDetails = () => {
 
   const fetchAll = async () => {
     try {
-      const [patientRes, implantsRes, fpdRes, clinicsRes] = await Promise.all([
+      const [patientRes, implantsRes, fpdRes, clinicsRes, abutmentRes, overdentureRes] = await Promise.all([
         axios.get(`${API_URL}/api/patients/${id}`, { withCredentials: true }),
         axios.get(`${API_URL}/api/implants?patient_id=${id}`, { withCredentials: true }),
         axios.get(`${API_URL}/api/fpd-records?patient_id=${id}`, { withCredentials: true }),
         axios.get(`${API_URL}/api/clinics`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/abutment-records?patient_id=${id}`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/overdenture-records?patient_id=${id}`, { withCredentials: true }),
       ]);
       setPatient(patientRes.data);
       setImplants(implantsRes.data);
       setFpdRecords(fpdRes.data);
       setClinics(clinicsRes.data);
+      setAbutmentRecords(abutmentRes.data);
+      setOverdentureRecords(overdentureRes.data);
       if (patientRes.data.tooth_conditions) {
         setToothConditions(patientRes.data.tooth_conditions);
       }
@@ -160,10 +225,72 @@ const PatientDetails = () => {
     }
   };
 
+  const captureDentalChartImage = async () => {
+    try {
+      const svg = document.querySelector('[aria-label="FDI Dental Chart"]');
+      if (!svg) return null;
+
+      // Clone SVG so we can mutate it without affecting the page
+      const clone = svg.cloneNode(true);
+
+      // Get the SVG's viewBox dimensions for canvas sizing
+      const vb = svg.viewBox?.baseVal;
+      const svgW = vb?.width  || svg.clientWidth  || 1050;
+      const svgH = vb?.height || svg.clientHeight || 400;
+
+      // Inline all external <image> hrefs as base64 so canvas renders them
+      const imageEls = clone.querySelectorAll('image');
+      await Promise.all(Array.from(imageEls).map(async (imgEl) => {
+        const href = imgEl.getAttribute('href') || imgEl.getAttribute('xlink:href');
+        if (!href || href.startsWith('data:')) return;
+        try {
+          const res = await fetch(href);
+          const blob = await res.blob();
+          const b64 = await new Promise((res2) => {
+            const fr = new FileReader();
+            fr.onload = () => res2(fr.result);
+            fr.readAsDataURL(blob);
+          });
+          imgEl.setAttribute('href', b64);
+          imgEl.removeAttribute('xlink:href');
+        } catch { /* skip failed images */ }
+      }));
+
+      // Serialize and render to canvas
+      const svgData = new XMLSerializer().serializeToString(clone);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      return await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = 2;
+          const canvas = document.createElement('canvas');
+          canvas.width  = svgW * scale;
+          canvas.height = svgH * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.scale(scale, scale);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, svgW, svgH);
+          ctx.drawImage(img, 0, 0, svgW, svgH);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+      });
+    } catch {
+      return null;
+    }
+  };
+
   const handleExportPDF = async () => {
     setGeneratingPdf(true);
     setPdfProgress('Preparing report...');
     try {
+      setPdfProgress('Capturing dental chart...');
+      const chartImage = await captureDentalChartImage();
+
       // Fetch extra vault photos
       const extraRes = await axios.get(`${API_URL}/api/patients/${id}/photos`, { withCredentials: true });
       await generatePatientPDF({
@@ -172,6 +299,7 @@ const PatientDetails = () => {
         fpdRecords,
         extraPhotos: extraRes.data,
         clinics,
+        chartImage,
         onProgress: (msg) => setPdfProgress(msg),
       });
       toast.success('PDF report downloaded');
@@ -185,14 +313,19 @@ const PatientDetails = () => {
 
   const handleMarkMissing = (toothNumber) => {
     const current = toothConditions[toothNumber]?.condition;
-    setMissingConfirm({ toothNumber, action: current === 'missing' ? 'revert' : 'mark' });
+    // Open dialog with clicked tooth pre-selected, show all teeth for multi-select
+    setMissingConfirm({
+      action: current === 'missing' ? 'revert' : 'mark',
+      selectedTeeth: [toothNumber],
+    });
   };
 
   const confirmMissingAction = async () => {
-    if (!missingConfirm) return;
-    const { toothNumber, action } = missingConfirm;
+    if (!missingConfirm || missingConfirm.selectedTeeth.length === 0) return;
+    const { action, selectedTeeth } = missingConfirm;
     const newCondition = action === 'mark' ? 'missing' : 'healthy';
-    const updated = { ...toothConditions, [toothNumber]: { condition: newCondition } };
+    const updated = { ...toothConditions };
+    selectedTeeth.forEach(tn => { updated[tn] = { condition: newCondition }; });
     setToothConditions(updated);
     setMissingConfirm(null);
     try {
@@ -200,10 +333,25 @@ const PatientDetails = () => {
         { tooth_conditions: updated },
         { withCredentials: true }
       );
-      toast.success(action === 'mark' ? `Tooth #${toothNumber} marked as missing` : `Tooth #${toothNumber} restored`);
+      const count = selectedTeeth.length;
+      toast.success(action === 'mark'
+        ? `${count} tooth${count > 1 ? 'teeth' : ''} marked as missing`
+        : `${count} tooth${count > 1 ? 'teeth' : ''} restored`);
     } catch {
       toast.error('Failed to save tooth status');
     }
+  };
+
+  const toggleMissingTooth = (tn) => {
+    setMissingConfirm(prev => {
+      const exists = prev.selectedTeeth.includes(tn);
+      return {
+        ...prev,
+        selectedTeeth: exists
+          ? prev.selectedTeeth.filter(t => t !== tn)
+          : [...prev.selectedTeeth, tn].sort((a, b) => a - b),
+      };
+    });
   };
 
   const openImplantLog = (toothNumber) => {
@@ -219,6 +367,102 @@ const PatientDetails = () => {
     setSelectedTooth(toothNumber);
     setFpdData({ ...INITIAL_FPD, tooth_numbers: [toothNumber] });
     setIsFpdOpen(true);
+  };
+
+  const openAbutmentLog = (toothNumber) => {
+    setAbutmentData({ ...INITIAL_ABUTMENT, tooth_number: toothNumber || '' });
+    setEditingAbutmentId(null);
+    setIsAbutmentOpen(true);
+  };
+
+  const openOverdentureLog = () => {
+    setOverdentureData({ ...INITIAL_OVERDENTURE });
+    setEditingOverdentureId(null);
+    setIsOverdentureOpen(true);
+  };
+
+  const handleSubmitAbutment = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = { ...abutmentData, patient_id: id, tooth_number: parseInt(abutmentData.tooth_number) };
+      if (editingAbutmentId) {
+        await axios.put(`${API_URL}/api/abutment-records/${editingAbutmentId}`, payload, { withCredentials: true });
+        toast.success('Abutment record updated');
+      } else {
+        await axios.post(`${API_URL}/api/abutment-records`, payload, { withCredentials: true });
+        toast.success('Abutment record added');
+      }
+      setIsAbutmentOpen(false);
+      setAbutmentData({ ...INITIAL_ABUTMENT });
+      setEditingAbutmentId(null);
+      fetchAll();
+    } catch (error) {
+      toast.error(editingAbutmentId ? 'Failed to update abutment record' : 'Failed to add abutment record');
+    }
+  };
+
+  const openEditAbutment = (rec) => {
+    setAbutmentData({
+      tooth_number: rec.tooth_number?.toString() || '',
+      abutment_type: rec.abutment_type || 'Stock Abutment Straight',
+      connected_implant_ids: rec.connected_implant_ids || [],
+      placement_date: rec.placement_date || '',
+      clinical_notes: rec.clinical_notes || '',
+      clinic_id: rec.clinic_id || '',
+    });
+    setEditingAbutmentId(rec._id);
+    setIsAbutmentOpen(true);
+  };
+
+  const handleSubmitOverdenture = async (e) => {
+    e.preventDefault();
+    if (overdentureData.tooth_numbers.length === 0) {
+      toast.error('Select at least one implant site');
+      return;
+    }
+    try {
+      const payload = { ...overdentureData, patient_id: id };
+      if (editingOverdentureId) {
+        await axios.put(`${API_URL}/api/overdenture-records/${editingOverdentureId}`, payload, { withCredentials: true });
+        toast.success('Overdenture record updated');
+      } else {
+        await axios.post(`${API_URL}/api/overdenture-records`, payload, { withCredentials: true });
+        toast.success('Overdenture record added');
+      }
+      setIsOverdentureOpen(false);
+      setOverdentureData({ ...INITIAL_OVERDENTURE });
+      setEditingOverdentureId(null);
+      fetchAll();
+    } catch (error) {
+      toast.error(editingOverdentureId ? 'Failed to update overdenture record' : 'Failed to add overdenture record');
+    }
+  };
+
+  const openEditOverdenture = (rec) => {
+    setOverdentureData({
+      tooth_numbers: rec.tooth_numbers || [],
+      attachment_type: rec.attachment_type || 'Ball Attachment',
+      connected_implant_ids: rec.connected_implant_ids || [],
+      has_bar: rec.has_bar || false,
+      bar_material: rec.bar_material || '',
+      prosthetic_loading_date: rec.prosthetic_loading_date || '',
+      clinical_notes: rec.clinical_notes || '',
+      clinic_id: rec.clinic_id || '',
+    });
+    setEditingOverdentureId(rec._id);
+    setIsOverdentureOpen(true);
+  };
+
+  const toggleOverdentureTooth = (tooth) => {
+    setOverdentureData(prev => {
+      const exists = prev.tooth_numbers.includes(tooth);
+      return {
+        ...prev,
+        tooth_numbers: exists
+          ? prev.tooth_numbers.filter(t => t !== tooth)
+          : [...prev.tooth_numbers, tooth].sort((a, b) => a - b)
+      };
+    });
   };
 
   const handleSubmitImplant = async (e) => {
@@ -568,22 +812,65 @@ const PatientDetails = () => {
         )}
       </div>
 
-      {/* Missing Tooth Confirmation Dialog */}
+      {/* Missing Tooth Confirmation Dialog — multi-select */}
       <Dialog open={!!missingConfirm} onOpenChange={(open) => { if (!open) setMissingConfirm(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold text-[#2A2F35]">
-              {missingConfirm?.action === 'mark' ? '⚠️ Mark tooth as missing?' : '↩️ Restore tooth?'}
+              {missingConfirm?.action === 'mark' ? '⚠️ Mark Teeth as Missing' : '↩️ Restore Teeth'}
             </DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            {missingConfirm?.action === 'mark' ? (
-              <p className="text-sm text-[#5C6773]">
-                Tooth <span className="font-bold text-[#2A2F35]">#{missingConfirm?.toothNumber}</span> will be marked as missing on the chart. This will be saved to the patient record.
-              </p>
-            ) : (
-              <p className="text-sm text-[#5C6773]">
-                Tooth <span className="font-bold text-[#2A2F35]">#{missingConfirm?.toothNumber}</span> is currently marked missing. Do you want to restore it to healthy status?
+            <p className="text-xs text-[#5C6773] mb-3">
+              {missingConfirm?.action === 'mark'
+                ? 'Select all teeth to mark as missing. They will be saved to the patient record.'
+                : 'Select all missing teeth to restore to healthy status.'}
+            </p>
+            {/* Upper arch teeth */}
+            <div className="mb-2">
+              <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-1">Upper Arch</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28].map(tn => (
+                  <button
+                    key={tn}
+                    type="button"
+                    data-testid={`missing-tooth-${tn}`}
+                    onClick={() => toggleMissingTooth(tn)}
+                    className={`w-9 h-9 text-xs font-medium rounded-md border transition-colors ${
+                      missingConfirm?.selectedTeeth?.includes(tn)
+                        ? missingConfirm.action === 'mark'
+                          ? 'bg-red-500 text-white border-red-500'
+                          : 'bg-[#82A098] text-white border-[#82A098]'
+                        : 'bg-white text-[#2A2F35] border-[#E5E5E2] hover:border-[#82A098]'
+                    }`}
+                  >{tn}</button>
+                ))}
+              </div>
+            </div>
+            {/* Lower arch teeth */}
+            <div>
+              <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-1">Lower Arch</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38].map(tn => (
+                  <button
+                    key={tn}
+                    type="button"
+                    data-testid={`missing-tooth-${tn}`}
+                    onClick={() => toggleMissingTooth(tn)}
+                    className={`w-9 h-9 text-xs font-medium rounded-md border transition-colors ${
+                      missingConfirm?.selectedTeeth?.includes(tn)
+                        ? missingConfirm.action === 'mark'
+                          ? 'bg-red-500 text-white border-red-500'
+                          : 'bg-[#82A098] text-white border-[#82A098]'
+                        : 'bg-white text-[#2A2F35] border-[#E5E5E2] hover:border-[#82A098]'
+                    }`}
+                  >{tn}</button>
+                ))}
+              </div>
+            </div>
+            {missingConfirm?.selectedTeeth?.length > 0 && (
+              <p className="mt-2 text-xs text-[#5C6773]">
+                Selected: <span className="font-medium text-[#2A2F35]">{missingConfirm.selectedTeeth.join(', ')}</span>
               </p>
             )}
           </div>
@@ -591,9 +878,12 @@ const PatientDetails = () => {
             <Button
               data-testid="confirm-missing-btn"
               onClick={confirmMissingAction}
+              disabled={!missingConfirm?.selectedTeeth?.length}
               className={`flex-1 text-white ${missingConfirm?.action === 'mark' ? 'bg-red-500 hover:bg-red-600' : 'bg-[#82A098] hover:bg-[#6B8A82]'}`}
             >
-              {missingConfirm?.action === 'mark' ? 'Yes, mark as missing' : 'Yes, restore tooth'}
+              {missingConfirm?.action === 'mark'
+                ? `Mark ${missingConfirm?.selectedTeeth?.length || 0} as Missing`
+                : `Restore ${missingConfirm?.selectedTeeth?.length || 0} Teeth`}
             </Button>
             <Button
               data-testid="cancel-missing-btn"
@@ -1001,6 +1291,201 @@ const PatientDetails = () => {
           </Dialog>
         </div>
 
+          {/* Abutment Log Dialog */}
+          <Dialog open={isAbutmentOpen} onOpenChange={(open) => {
+            setIsAbutmentOpen(open);
+            if (!open) { setAbutmentData({ ...INITIAL_ABUTMENT }); setEditingAbutmentId(null); }
+          }}>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-semibold">
+                  {editingAbutmentId ? 'Edit Abutment Record' : 'Abutment Log'}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmitAbutment} className="space-y-4 mt-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Tooth Number *</Label>
+                    <Input type="number" value={abutmentData.tooth_number} onChange={e => setAbutmentData(p => ({ ...p, tooth_number: e.target.value }))} required data-testid="abutment-tooth-number" className="mt-1" placeholder="e.g. 16" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Placement Date</Label>
+                    <Input type="date" value={abutmentData.placement_date} onChange={e => setAbutmentData(p => ({ ...p, placement_date: e.target.value }))} data-testid="abutment-placement-date" className="mt-1" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs">Abutment Type *</Label>
+                  <select value={abutmentData.abutment_type} onChange={e => setAbutmentData(p => ({ ...p, abutment_type: e.target.value }))} data-testid="abutment-type-select" className={`mt-1 ${selectClass}`} required>
+                    {ABUTMENT_TYPES.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+
+                {/* Connected implants */}
+                {implants.length > 0 && (
+                  <div>
+                    <Label className="text-xs">Connected Implant(s)</Label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {implants.map(imp => (
+                        <label key={imp._id} className="flex items-center gap-1.5 text-sm border border-[#E5E5E2] rounded-md px-2.5 py-1.5 cursor-pointer hover:border-[#E8A76C] transition-colors">
+                          <input type="checkbox"
+                            checked={abutmentData.connected_implant_ids.includes(imp._id)}
+                            onChange={e => setAbutmentData(prev => ({
+                              ...prev,
+                              connected_implant_ids: e.target.checked
+                                ? [...prev.connected_implant_ids, imp._id]
+                                : prev.connected_implant_ids.filter(x => x !== imp._id)
+                            }))}
+                            className={checkboxClass}
+                          />
+                          <span>#{imp.tooth_number} ({imp.brand})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-xs">Clinic</Label>
+                  <select value={abutmentData.clinic_id} onChange={e => setAbutmentData(p => ({ ...p, clinic_id: e.target.value }))} className={`mt-1 ${selectClass}`}>
+                    <option value="">Select clinic</option>
+                    {clinics.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="text-xs">Clinical Notes</Label>
+                  <textarea value={abutmentData.clinical_notes} onChange={e => setAbutmentData(p => ({ ...p, clinical_notes: e.target.value }))} data-testid="abutment-notes" rows={3} className={`mt-1 ${selectClass}`} placeholder="Torque values, angulation notes..." />
+                </div>
+
+                <Button type="submit" data-testid="submit-abutment-button" className="w-full bg-[#E8A76C] hover:bg-[#D4925A] text-white">
+                  {editingAbutmentId ? 'Save Changes' : 'Add Abutment Record'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Overdenture Log Dialog */}
+          <Dialog open={isOverdentureOpen} onOpenChange={(open) => {
+            setIsOverdentureOpen(open);
+            if (!open) { setOverdentureData({ ...INITIAL_OVERDENTURE }); setEditingOverdentureId(null); }
+          }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-semibold" style={{ color: '#7C3AED' }}>
+                  {editingOverdentureId ? 'Edit Overdenture Record' : 'Overdenture Log'}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmitOverdenture} className="space-y-4 mt-2">
+                {/* Tooth/implant site selection */}
+                <div>
+                  <Label className="text-xs mb-2 block">Implant Sites (select teeth covered by overdenture)</Label>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-1">Upper Arch</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28].map(tn => (
+                          <button key={tn} type="button"
+                            onClick={() => toggleOverdentureTooth(tn)}
+                            className={`w-9 h-9 text-xs font-medium rounded-md border transition-colors ${
+                              overdentureData.tooth_numbers.includes(tn)
+                                ? 'bg-[#7C3AED] text-white border-[#7C3AED]'
+                                : 'bg-white text-[#2A2F35] border-[#E5E5E2] hover:border-[#7C3AED]'
+                            }`}
+                          >{tn}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-1">Lower Arch</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38].map(tn => (
+                          <button key={tn} type="button"
+                            onClick={() => toggleOverdentureTooth(tn)}
+                            className={`w-9 h-9 text-xs font-medium rounded-md border transition-colors ${
+                              overdentureData.tooth_numbers.includes(tn)
+                                ? 'bg-[#7C3AED] text-white border-[#7C3AED]'
+                                : 'bg-white text-[#2A2F35] border-[#E5E5E2] hover:border-[#7C3AED]'
+                            }`}
+                          >{tn}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  {overdentureData.tooth_numbers.length > 0 && (
+                    <p className="mt-1 text-xs text-[#5C6773]">Selected: <span className="font-medium text-[#7C3AED]">{overdentureData.tooth_numbers.join(', ')}</span></p>
+                  )}
+                </div>
+
+                <div>
+                  <Label className="text-xs">Overdenture Attachment Type *</Label>
+                  <select value={overdentureData.attachment_type} onChange={e => setOverdentureData(p => ({ ...p, attachment_type: e.target.value }))} data-testid="overdenture-attachment-type" className={`mt-1 ${selectClass}`} required>
+                    {OVERDENTURE_ATTACHMENTS.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+
+                {/* Bar section */}
+                <div className="border border-[#E5E5E2] rounded-lg p-3 space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-[#2A2F35]">
+                    <input type="checkbox" checked={overdentureData.has_bar} onChange={e => setOverdentureData(p => ({ ...p, has_bar: e.target.checked, bar_material: e.target.checked ? p.bar_material : '' }))} className={checkboxClass} data-testid="overdenture-has-bar" />
+                    Implant Bar (connecting implants)
+                  </label>
+                  {overdentureData.has_bar && (
+                    <div>
+                      <Label className="text-xs">Bar Material</Label>
+                      <select value={overdentureData.bar_material} onChange={e => setOverdentureData(p => ({ ...p, bar_material: e.target.value }))} data-testid="overdenture-bar-material" className={`mt-1 ${selectClass}`}>
+                        <option value="">Select material</option>
+                        <option>Titanium</option>
+                        <option>Cobalt Chromium</option>
+                        <option>Gold Alloy</option>
+                        <option>PEEK</option>
+                        <option>Zirconia</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Connected implants */}
+                {implants.length > 0 && (
+                  <div>
+                    <Label className="text-xs">Connected Implant(s)</Label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {implants.map(imp => (
+                        <label key={imp._id} className="flex items-center gap-1.5 text-sm border border-[#E5E5E2] rounded-md px-2.5 py-1.5 cursor-pointer hover:border-[#7C3AED] transition-colors">
+                          <input type="checkbox"
+                            checked={overdentureData.connected_implant_ids.includes(imp._id)}
+                            onChange={e => setOverdentureData(prev => ({
+                              ...prev,
+                              connected_implant_ids: e.target.checked
+                                ? [...prev.connected_implant_ids, imp._id]
+                                : prev.connected_implant_ids.filter(x => x !== imp._id)
+                            }))}
+                            className={checkboxClass}
+                          />
+                          <span>#{imp.tooth_number} ({imp.brand})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-xs">Prosthetic Loading Date</Label>
+                  <Input type="date" value={overdentureData.prosthetic_loading_date} onChange={e => setOverdentureData(p => ({ ...p, prosthetic_loading_date: e.target.value }))} data-testid="overdenture-loading-date" className="mt-1" />
+                </div>
+
+                <div>
+                  <Label className="text-xs">Clinical Notes</Label>
+                  <textarea value={overdentureData.clinical_notes} onChange={e => setOverdentureData(p => ({ ...p, clinical_notes: e.target.value }))} data-testid="overdenture-notes" rows={3} className={`mt-1 ${selectClass}`} placeholder="Retention, occlusion, patient comfort notes..." />
+                </div>
+
+                <Button type="submit" data-testid="submit-overdenture-button" className="w-full text-white" style={{ backgroundColor: '#7C3AED' }}>
+                  {editingOverdentureId ? 'Save Changes' : 'Add Overdenture Record'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+
         {/* FDI Dental Chart — high-fidelity SVG */}
         <div className="overflow-x-auto">
           <div style={{ minWidth: 560 }}>
@@ -1011,6 +1496,8 @@ const PatientDetails = () => {
               onMarkMissing={handleMarkMissing}
               onImplantLog={openImplantLog}
               onCrownLog={openCrownLog}
+              onAbutmentLog={openAbutmentLog}
+              onOverdentureLog={openOverdentureLog}
             />
           </div>
         </div>
@@ -1152,6 +1639,84 @@ const PatientDetails = () => {
                     <p className="text-[10px] text-[#9CA3AF] mt-0.5">Warranty card</p>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Abutment Records */}
+      {abutmentRecords.length > 0 && (
+        <div className="bg-white border border-[#E5E5E2] rounded-xl p-6 shadow-sm mb-6">
+          <h2 className="text-lg font-medium text-[#2A2F35] mb-4" style={{ color: '#D4925A' }}>
+            Abutment Records ({abutmentRecords.length})
+          </h2>
+          <div className="space-y-3">
+            {abutmentRecords.map((rec) => (
+              <div key={rec._id} data-testid={`abutment-record-${rec._id}`} className="border border-[#E5E5E2] rounded-lg p-4 hover:border-[#E8A76C] transition-all">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-medium text-sm flex-shrink-0" style={{ backgroundColor: '#E8A76C' }}>
+                      {rec.tooth_number}
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-[#2A2F35] text-sm">{rec.abutment_type}</h3>
+                      {rec.placement_date && <p className="text-xs text-[#5C6773]">Placed: {rec.placement_date}</p>}
+                    </div>
+                  </div>
+                  <button
+                    data-testid={`edit-abutment-${rec._id}`}
+                    onClick={() => openEditAbutment(rec)}
+                    className="p-1.5 rounded-md hover:bg-[#F0F0EE] text-[#5C6773] hover:text-[#E8A76C] transition-colors flex-shrink-0"
+                    title="Edit abutment record"
+                  >
+                    <PencilSimple size={15} weight="bold" />
+                  </button>
+                </div>
+                {rec.clinical_notes && <p className="text-xs text-[#5C6773] italic">{rec.clinical_notes}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Overdenture Records */}
+      {overdentureRecords.length > 0 && (
+        <div className="bg-white border border-[#E5E5E2] rounded-xl p-6 shadow-sm mb-6">
+          <h2 className="text-lg font-medium mb-4" style={{ color: '#7C3AED' }}>
+            Overdenture Records ({overdentureRecords.length})
+          </h2>
+          <div className="space-y-3">
+            {overdentureRecords.map((rec) => (
+              <div key={rec._id} data-testid={`overdenture-record-${rec._id}`} className="border rounded-lg p-4 transition-all" style={{ borderColor: '#C4B5FD' }}>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="font-medium text-[#2A2F35] text-sm">
+                      Overdenture — {rec.attachment_type}
+                    </h3>
+                    <p className="text-xs text-[#5C6773]">Teeth: {rec.tooth_numbers?.join(', ')}</p>
+                  </div>
+                  <button
+                    data-testid={`edit-overdenture-${rec._id}`}
+                    onClick={() => openEditOverdenture(rec)}
+                    className="p-1.5 rounded-md hover:bg-[#F0F0EE] text-[#5C6773] transition-colors flex-shrink-0"
+                    title="Edit overdenture record"
+                  >
+                    <PencilSimple size={15} weight="bold" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                  {rec.has_bar && (
+                    <div><span className="text-[#5C6773]">Bar:</span> <span className="font-medium" style={{ color: '#7C3AED' }}>{rec.bar_material || 'Yes'}</span></div>
+                  )}
+                  {rec.prosthetic_loading_date && (
+                    <div><span className="text-[#5C6773]">Loading:</span> <span className="font-medium text-[#2A2F35]">{rec.prosthetic_loading_date}</span></div>
+                  )}
+                  {rec.connected_implant_ids?.length > 0 && (
+                    <div><span className="text-[#5C6773]">Implants connected:</span> <span className="font-medium text-[#2A2F35]">{rec.connected_implant_ids.length}</span></div>
+                  )}
+                </div>
+                {rec.clinical_notes && <p className="mt-2 text-xs text-[#5C6773] italic">{rec.clinical_notes}</p>}
               </div>
             ))}
           </div>

@@ -54,8 +54,8 @@ const Layout = () => {
       {/* Sidebar */}
       <aside className="w-64 bg-[#F0F0EE] border-r border-[#E5E5E2] hidden md:flex md:flex-col relative">
         <div className="p-6">
-          <h1 className="text-2xl font-semibold text-[#2A2F35] tracking-tight">DentalHub</h1>
-          <p className="text-xs text-[#5C6773] mt-1">Implant Management</p>
+          <h1 className="text-2xl font-semibold text-[#2A2F35] tracking-tight">OSIOLOG</h1>
+          <p className="text-xs text-[#5C6773] mt-1">Dental Implant Management System</p>
         </div>
         
         <nav className="px-3 mt-6 flex-1">
@@ -86,7 +86,7 @@ const Layout = () => {
         {/* Top Header Bar */}
         <header className="h-14 bg-white border-b border-[#E5E5E2] flex items-center justify-between px-4 md:px-6 shrink-0 z-40" data-testid="top-header">
           <div className="md:hidden">
-            <h1 className="text-lg font-semibold text-[#2A2F35] tracking-tight">DentalHub</h1>
+            <h1 className="text-lg font-semibold text-[#2A2F35] tracking-tight">OSIOLOG</h1>
           </div>
           <div className="hidden md:block" />
 

@@ -85,7 +85,7 @@ function footer(doc, pageNum, total, patientName, date) {
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...C.mid);
-  doc.text(`DentalHub — ${patientName}`, 14, pageH - 7);
+  doc.text(`OSIOLOG — ${patientName}`, 14, pageH - 7);
   doc.text(`Generated ${date}`, 105, pageH - 7, { align: 'center' });
   doc.text(`Page ${pageNum} of ${total}`, 196, pageH - 7, { align: 'right' });
 }
@@ -112,6 +112,7 @@ export async function generatePatientPDF({
   fpdRecords = [],
   extraPhotos = [],
   clinics = [],
+  chartImage = null,
   onProgress,
 }) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
@@ -136,10 +137,10 @@ export async function generatePatientPDF({
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...C.white);
-  doc.text('DentalHub', margin, 12);
+  doc.text('OSIOLOG', margin, 12);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('Clinical Patient Report', margin, 19);
+  doc.text('Dental Implant Management System  —  Clinical Report', margin, 19);
   doc.text(`Generated: ${today}`, pageW - margin, 19, { align: 'right' });
 
   y = 36;
@@ -200,6 +201,26 @@ export async function generatePatientPDF({
   }
 
   y += 6;
+
+  /* ════════════════════════════════════════
+     FDI DENTAL CHART
+  ════════════════════════════════════════ */
+  if (chartImage) {
+    onProgress?.('Embedding dental chart...');
+    y = checkY(doc, y, 80, pages);
+    y = sectionHeading(doc, 'FDI Dental Chart', y);
+
+    // Fit chart image across full content width, maintain aspect ratio (SVG ~1056×368 → 0.348)
+    const chartW = contentW;
+    const chartH = Math.round(contentW * 0.348);
+    y = checkY(doc, y, chartH + 6, pages);
+    try {
+      doc.addImage(chartImage, 'PNG', margin, y, chartW, chartH);
+    } catch {
+      // fallback: skip chart silently
+    }
+    y += chartH + 8;
+  }
 
   /* ════════════════════════════════════════
      IMPLANT RECORDS
@@ -452,5 +473,5 @@ export async function generatePatientPDF({
 
   /* Save */
   const safeName = patientName.replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`DentalHub_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`OSIOLOG_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }

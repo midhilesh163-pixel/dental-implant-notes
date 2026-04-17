@@ -40,7 +40,7 @@ app.add_middleware(
 )
 
 JWT_ALGORITHM = "HS256"
-APP_NAME = "dentalhub"
+APP_NAME = "osiolog"
 
 # Local file storage — files saved under backend/uploads/
 UPLOAD_DIR = ROOT_DIR / "uploads"
@@ -71,7 +71,7 @@ def get_jwt_secret() -> str:
 # Auth Routes
 @api_router.get("/")
 async def root():
-    return {"message": "Dental Hub API", "status": "running"}
+    return {"message": "OSIOLOG API", "status": "running"}
 
 def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
@@ -240,6 +240,26 @@ class FPDCreate(BaseModel):
     lab_name: Optional[str] = None                   # dental lab that fabricated the crowns
     warranty_image: Optional[str] = None             # base64 or storage path of warranty card photo
 
+class AbutmentCreate(BaseModel):
+    patient_id: str
+    tooth_number: int
+    abutment_type: str                              # e.g. "Stock Abutment Straight", "MUA Angled 15°"
+    connected_implant_ids: Optional[List[str]] = []
+    placement_date: Optional[str] = None
+    clinical_notes: Optional[str] = None
+    clinic_id: Optional[str] = None
+
+class OverdentureCreate(BaseModel):
+    patient_id: str
+    tooth_numbers: List[int]
+    attachment_type: str                            # e.g. "Ball Attachment", "Locator", "Bar"
+    connected_implant_ids: Optional[List[str]] = []
+    has_bar: bool = False
+    bar_material: Optional[str] = None             # Titanium / Cobalt Chromium / Gold / PEEK
+    prosthetic_loading_date: Optional[str] = None
+    clinical_notes: Optional[str] = None
+    clinic_id: Optional[str] = None
+
 class ProfileUpdate(BaseModel):
     college: Optional[str] = None
     college_place: Optional[str] = None
@@ -351,7 +371,7 @@ EXTERNAL_ADS = [
         "id": "ad_001",
         "image_url": None,                          # None = show text-only placeholder
         "headline": "Advertise Here",
-        "subtext": "Reach dental professionals using DentalHub. Contact us to place your ad.",
+        "subtext": "Reach dental professionals using OSIOLOG. Contact us to place your ad.",
         "cta_label": "Learn More",
         "cta_url": None,
         "bg_color": "#F0F4FF",
@@ -825,6 +845,96 @@ async def delete_fpd_record(record_id: str, request: Request):
     result = await db.fpd_records.delete_one({"_id": ObjectId(record_id), "doctor_id": user["_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="FPD record not found")
+
+# Abutment Record Endpoints
+@api_router.post("/abutment-records")
+async def create_abutment_record(abutment: AbutmentCreate, request: Request):
+    user = await get_current_user(request)
+    doc = abutment.model_dump()
+    doc["doctor_id"] = user["_id"]
+    doc["created_at"] = datetime.now(timezone.utc)
+    result = await db.abutment_records.insert_one(doc)
+    doc["_id"] = str(result.inserted_id)
+    return doc
+
+@api_router.get("/abutment-records")
+async def get_abutment_records(request: Request, patient_id: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"doctor_id": user["_id"]}
+    if patient_id:
+        query["patient_id"] = patient_id
+    records = await db.abutment_records.find(query).to_list(1000)
+    for r in records:
+        r["_id"] = str(r["_id"])
+    return records
+
+@api_router.put("/abutment-records/{record_id}")
+async def update_abutment_record(record_id: str, abutment: AbutmentCreate, request: Request):
+    user = await get_current_user(request)
+    try:
+        obj_id = ObjectId(record_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid record ID")
+    result = await db.abutment_records.update_one(
+        {"_id": obj_id, "doctor_id": user["_id"]},
+        {"$set": abutment.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Abutment record not found or not yours")
+    return {"message": "Abutment record updated successfully"}
+
+@api_router.delete("/abutment-records/{record_id}")
+async def delete_abutment_record(record_id: str, request: Request):
+    user = await get_current_user(request)
+    result = await db.abutment_records.delete_one({"_id": ObjectId(record_id), "doctor_id": user["_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Abutment record not found")
+    return {"message": "Abutment record deleted"}
+
+# Overdenture Record Endpoints
+@api_router.post("/overdenture-records")
+async def create_overdenture_record(ov: OverdentureCreate, request: Request):
+    user = await get_current_user(request)
+    doc = ov.model_dump()
+    doc["doctor_id"] = user["_id"]
+    doc["created_at"] = datetime.now(timezone.utc)
+    result = await db.overdenture_records.insert_one(doc)
+    doc["_id"] = str(result.inserted_id)
+    return doc
+
+@api_router.get("/overdenture-records")
+async def get_overdenture_records(request: Request, patient_id: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"doctor_id": user["_id"]}
+    if patient_id:
+        query["patient_id"] = patient_id
+    records = await db.overdenture_records.find(query).to_list(1000)
+    for r in records:
+        r["_id"] = str(r["_id"])
+    return records
+
+@api_router.put("/overdenture-records/{record_id}")
+async def update_overdenture_record(record_id: str, ov: OverdentureCreate, request: Request):
+    user = await get_current_user(request)
+    try:
+        obj_id = ObjectId(record_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid record ID")
+    result = await db.overdenture_records.update_one(
+        {"_id": obj_id, "doctor_id": user["_id"]},
+        {"$set": ov.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Overdenture record not found or not yours")
+    return {"message": "Overdenture record updated successfully"}
+
+@api_router.delete("/overdenture-records/{record_id}")
+async def delete_overdenture_record(record_id: str, request: Request):
+    user = await get_current_user(request)
+    result = await db.overdenture_records.delete_one({"_id": ObjectId(record_id), "doctor_id": user["_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Overdenture record not found")
+    return {"message": "Overdenture record deleted"}
     return {"message": "FPD record deleted"}
 
 # Profile Update Endpoint
