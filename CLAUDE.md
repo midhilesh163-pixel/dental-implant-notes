@@ -74,6 +74,8 @@ POST /api/auth/register          ← Doctor signup
 POST /api/auth/login             ← Returns JWT in httpOnly cookie
 GET  /api/auth/me                ← Current user from cookie
 POST /api/auth/logout
+POST /api/auth/forgot-password   ← Emails a 1-hour password reset link (generic response either way)
+POST /api/auth/reset-password    ← Consumes the reset token, sets new password
 
 GET  /api/patients               ← Doctor-scoped patient list
 POST /api/patients
@@ -139,6 +141,8 @@ photo_vault: { patient_id, doctor_id, filename, content_type, path,
 - [x] Account page — displays all doctor details
 - [x] FPD log sheet backend endpoints (`POST /api/fpd`)
 - [x] Profile update endpoint (`PATCH /api/profile`)
+- [x] Forgot/reset password via email (Gmail SMTP) — `/forgot-password`, `/reset-password` pages
+- [x] Daily email reminders to doctors — osseointegration-complete + follow-up-date digest (background job in `server.py`, requires `GMAIL_USER`/`GMAIL_APP_PASSWORD`)
 - [x] Unified single-form implant modal (no tabs) — **code written, UI testing pending**
 - [x] FPD modal UI in PatientDetails.js — **code written, UI testing pending**
 - [x] Account page editable college/place — **code written, UI testing pending**
@@ -187,6 +191,9 @@ cd frontend && yarn start    # runs on port 3000 via CRACO
 - `DB_NAME` — Database name
 - `JWT_SECRET` — JWT signing secret
 - `EMERGENT_LLM_KEY` — Emergent Object Storage key (photo uploads)
+- `FRONTEND_URL` — used for CORS and to build links in emails (e.g. password reset)
+- `GMAIL_USER` — Gmail/Google Workspace address that sends transactional email (password reset, daily reminders)
+- `GMAIL_APP_PASSWORD` — App password for `GMAIL_USER` (smtp.gmail.com:465). Without these two set, emails are skipped and logged as an error — nothing crashes.
 
 ### After any backend code change — REQUIRED
 After completing any change to `backend/server.py` or any other backend file that requires a server restart:

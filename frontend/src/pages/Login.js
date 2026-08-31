@@ -72,9 +72,18 @@ const Login = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#2A2F35] mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-[#2A2F35]">
+                  Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  data-testid="forgot-password-link"
+                  className="text-sm text-[#82A098] hover:text-[#6B8A82] font-medium transition-colors duration-200"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}

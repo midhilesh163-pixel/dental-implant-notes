@@ -22,6 +22,11 @@ import jwt
 import secrets
 import uuid
 import shutil
+import asyncio
+import hashlib
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -67,6 +72,35 @@ def get_object(path: str) -> tuple:
 # Helper Functions
 def get_jwt_secret() -> str:
     return os.environ["JWT_SECRET"]
+
+def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
+    gmail_user = os.environ.get("GMAIL_USER")
+    gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
+    if not gmail_user or not gmail_app_password:
+        logger.error("Email not sent — GMAIL_USER/GMAIL_APP_PASSWORD not configured")
+        return False
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"OSIOLOG <{gmail_user}>"
+    msg["To"] = to_email
+    msg["Reply-To"] = gmail_user
+    if text_body:
+        msg.attach(MIMEText(text_body, "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_user, gmail_app_password)
+            server.sendmail(gmail_user, to_email, msg.as_string())
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email to {to_email}: {e}")
+        return False
+
+def is_expired(expires_at: datetime) -> bool:
+    now = datetime.now(timezone.utc) if expires_at.tzinfo else datetime.utcnow()
+    return expires_at < now
 
 # Auth Routes
 @api_router.get("/")
@@ -152,6 +186,13 @@ class DoctorRegister(BaseModel):
 class DoctorLogin(BaseModel):
     email: EmailStr
     password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 class PatientCreate(BaseModel):
     name: str
@@ -464,6 +505,61 @@ async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     return {"message": "Logged out successfully"}
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest):
+    email_lower = payload.email.lower()
+    user = await db.users.find_one({"email": email_lower})
+
+    if user:
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        await db.password_resets.insert_one({
+            "user_id": str(user["_id"]),
+            "token_hash": token_hash,
+            "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+            "used": False,
+            "created_at": datetime.now(timezone.utc),
+        })
+
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+        reset_link = f"{frontend_url}/reset-password?token={raw_token}"
+        doctor_name = user.get("name", "Doctor")
+        html_body = f"""
+        <div style="font-family: 'IBM Plex Sans', Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2A2F35;">
+          <h2 style="color:#2A2F35;">Reset your OSIOLOG password</h2>
+          <p>Hi Dr. {doctor_name},</p>
+          <p>We received a request to reset the password for your OSIOLOG account. Click the button below to choose a new password. This link expires in 1 hour.</p>
+          <p style="margin: 24px 0;">
+            <a href="{reset_link}" style="background:#82A098;color:#ffffff;padding:12px 24px;border-radius:12px;text-decoration:none;font-weight:600;display:inline-block;">Reset Password</a>
+          </p>
+          <p>If you didn't request this, you can safely ignore this email — your password will remain unchanged.</p>
+          <p style="color:#5C6773;font-size:13px;margin-top:32px;">OSIOLOG — Dental Implant Management System</p>
+        </div>
+        """
+        text_body = (
+            f"Reset your OSIOLOG password: {reset_link}\n"
+            "This link expires in 1 hour. If you didn't request this, ignore this email."
+        )
+        await asyncio.to_thread(send_email, email_lower, "Reset your OSIOLOG password", html_body, text_body)
+
+    return {"message": "If that email is registered, a password reset link has been sent."}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    record = await db.password_resets.find_one({"token_hash": token_hash, "used": False})
+    if not record or is_expired(record["expires_at"]):
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
+
+    new_hash = hash_password(payload.new_password)
+    await db.users.update_one({"_id": ObjectId(record["user_id"])}, {"$set": {"password_hash": new_hash}})
+    await db.password_resets.update_one({"_id": record["_id"]}, {"$set": {"used": True}})
+
+    return {"message": "Password reset successful. You can now log in with your new password."}
 
 # Patient Endpoints
 @api_router.post("/patients")
@@ -1554,6 +1650,71 @@ async def bulk_import(file: UploadFile = File(...), request: Request = None):
     return {"message": "Import complete", "created": results, "errors": errors}
 
 
+async def send_daily_reminders():
+    today = datetime.now(timezone.utc).date()
+    doctor_items: Dict[str, List[Dict[str, Any]]] = {}
+
+    async def patient_name_for(patient_id: str) -> str:
+        if not ObjectId.is_valid(patient_id or ""):
+            return "Unknown patient"
+        patient = await db.patients.find_one({"_id": ObjectId(patient_id)})
+        return patient["name"] if patient else "Unknown patient"
+
+    async for implant in db.implants.find({"status": "healing", "reminder_sent": {"$ne": True}}):
+        osseo_date = implant.get("osseointegration_date")
+        osseo_date_only = osseo_date.date() if hasattr(osseo_date, "date") else None
+        if osseo_date_only != today:
+            continue
+        name = await patient_name_for(implant.get("patient_id"))
+        doctor_items.setdefault(implant["doctor_id"], []).append({
+            "text": f"{name} — tooth #{implant.get('tooth_number')} osseointegration period is complete today. Consider a prosthetic loading assessment.",
+            "implant_id": implant["_id"],
+            "field": "reminder_sent",
+        })
+
+    async for implant in db.implants.find({"follow_up_date": today.isoformat(), "follow_up_reminder_sent": {"$ne": True}}):
+        name = await patient_name_for(implant.get("patient_id"))
+        doctor_items.setdefault(implant["doctor_id"], []).append({
+            "text": f"{name} — tooth #{implant.get('tooth_number')} has a scheduled follow-up today.",
+            "implant_id": implant["_id"],
+            "field": "follow_up_reminder_sent",
+        })
+
+    for doctor_id, items in doctor_items.items():
+        if not ObjectId.is_valid(doctor_id):
+            continue
+        doctor = await db.users.find_one({"_id": ObjectId(doctor_id)})
+        if not doctor or not doctor.get("email"):
+            continue
+
+        list_html = "".join(f"<li style='margin-bottom:8px;'>{item['text']}</li>" for item in items)
+        html_body = f"""
+        <div style="font-family: 'IBM Plex Sans', Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #2A2F35;">
+          <h2 style="color:#2A2F35;">Today's patient reminders</h2>
+          <p>Hi Dr. {doctor.get('name', '')},</p>
+          <p>Here's what's due today in OSIOLOG:</p>
+          <ul style="padding-left:20px;">{list_html}</ul>
+          <p style="color:#5C6773;font-size:13px;margin-top:32px;">OSIOLOG — Dental Implant Management System</p>
+        </div>
+        """
+        text_body = "Today's patient reminders:\n" + "\n".join(f"- {item['text']}" for item in items)
+
+        sent = await asyncio.to_thread(
+            send_email, doctor["email"], "OSIOLOG — Today's patient reminders", html_body, text_body
+        )
+        if sent:
+            for item in items:
+                await db.implants.update_one({"_id": item["implant_id"]}, {"$set": {item["field"]: True}})
+
+async def reminder_loop():
+    while True:
+        try:
+            await send_daily_reminders()
+        except Exception as e:
+            logger.error(f"Daily reminder job failed: {e}")
+        await asyncio.sleep(24 * 60 * 60)
+
+
 app.include_router(api_router)
 
 # Startup event
@@ -1567,7 +1728,11 @@ async def startup_event():
     await db.implants.create_index("doctor_id")
     await db.implants.create_index("patient_id")
     await db.clinics.create_index("doctor_id")
-    
+    await db.password_resets.create_index("token_hash")
+    await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
+
+    asyncio.create_task(reminder_loop())
+
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@dentalapp.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
