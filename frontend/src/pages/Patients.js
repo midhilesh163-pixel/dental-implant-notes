@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { Plus, MagnifyingGlass } from '@phosphor-icons/react';
@@ -78,6 +78,27 @@ const Patients = () => {
     patient.phone.includes(searchQuery) ||
     (patient.email && patient.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+  const sectionRefs = useRef({});
+
+  const groupedPatients = useMemo(() => {
+    const sorted = [...filteredPatients].sort((a, b) => a.name.localeCompare(b.name));
+    const groups = {};
+    sorted.forEach((patient) => {
+      const firstChar = patient.name.trim().charAt(0).toUpperCase();
+      const key = /[A-Z]/.test(firstChar) ? firstChar : '#';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(patient);
+    });
+    return groups;
+  }, [filteredPatients]);
+
+  const availableLetters = useMemo(() => new Set(Object.keys(groupedPatients)), [groupedPatients]);
+
+  const scrollToLetter = (letter) => {
+    sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="p-8" style={{ fontFamily: 'IBM Plex Sans, sans-serif' }}>
@@ -239,42 +260,82 @@ const Patients = () => {
           <p className="text-[#5C6773]">No patients found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPatients.map((patient) => (
-            <Link
-              key={patient._id}
-              to={`/patients/${patient._id}`}
-              data-testid={`patient-card-${patient._id}`}
-              className="bg-white border border-[#E5E5E2] rounded-xl p-6 shadow-sm hover:shadow-md hover:border-[#82A098] transition-all duration-200"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-full bg-[#82A098] flex items-center justify-center text-white font-medium text-lg overflow-hidden shrink-0">
-                  {patient.profile_picture ? (
-                    <img
-                      src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${patient.profile_picture}`}
-                      alt={patient.name}
-                      className="w-12 h-12 object-cover"
-                    />
-                  ) : (
-                    patient.name.charAt(0)
-                  )}
+        <div className="relative">
+          <div className="space-y-8 md:pr-16">
+            {ALPHABET.filter((letter) => groupedPatients[letter]).map((letter) => (
+              <div key={letter} ref={(el) => (sectionRefs.current[letter] = el)} data-testid={`patient-section-${letter}`}>
+                <h2
+                  className="text-sm font-semibold text-[#82A098] uppercase tracking-wide mb-3 sticky top-0 bg-[#F9F9F8] py-1 z-10"
+                  style={{ fontFamily: 'Work Sans, sans-serif' }}
+                >
+                  {letter}
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {groupedPatients[letter].map((patient) => (
+                    <Link
+                      key={patient._id}
+                      to={`/patients/${patient._id}`}
+                      data-testid={`patient-card-${patient._id}`}
+                      className="bg-white border border-[#E5E5E2] rounded-xl p-6 shadow-sm hover:shadow-md hover:border-[#82A098] transition-all duration-200"
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-12 h-12 rounded-full bg-[#82A098] flex items-center justify-center text-white font-medium text-lg overflow-hidden shrink-0">
+                          {patient.profile_picture ? (
+                            <img
+                              src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${patient.profile_picture}`}
+                              alt={patient.name}
+                              className="w-12 h-12 object-cover"
+                            />
+                          ) : (
+                            patient.name.charAt(0)
+                          )}
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          patient.gender === 'Male' ? 'bg-blue-100 text-blue-700' :
+                          patient.gender === 'Female' ? 'bg-pink-100 text-pink-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {patient.gender}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-medium text-[#2A2F35] mb-1">{patient.name}</h3>
+                      <p className="text-sm text-[#5C6773] mb-3">{patient.age} years old</p>
+                      <div className="space-y-1">
+                        <p className="text-sm text-[#5C6773]">{patient.phone}</p>
+                        {patient.email && <p className="text-sm text-[#5C6773]">{patient.email}</p>}
+                      </div>
+                    </Link>
+                  ))}
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  patient.gender === 'Male' ? 'bg-blue-100 text-blue-700' :
-                  patient.gender === 'Female' ? 'bg-pink-100 text-pink-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
-                  {patient.gender}
-                </span>
               </div>
-              <h3 className="text-lg font-medium text-[#2A2F35] mb-1">{patient.name}</h3>
-              <p className="text-sm text-[#5C6773] mb-3">{patient.age} years old</p>
-              <div className="space-y-1">
-                <p className="text-sm text-[#5C6773]">{patient.phone}</p>
-                {patient.email && <p className="text-sm text-[#5C6773]">{patient.email}</p>}
-              </div>
-            </Link>
-          ))}
+            ))}
+          </div>
+
+          {/* Alphabet Quick-Jump Sidebar */}
+          <div
+            data-testid="alphabet-sidebar"
+            className="hidden md:flex flex-col items-center gap-0.5 fixed right-4 top-28 bottom-6 justify-center overflow-y-auto bg-white border border-[#E5E5E2] rounded-xl px-2 py-4 shadow-sm z-20"
+          >
+            {ALPHABET.map((letter) => {
+              const isAvailable = availableLetters.has(letter);
+              return (
+                <button
+                  key={letter}
+                  type="button"
+                  disabled={!isAvailable}
+                  onClick={() => scrollToLetter(letter)}
+                  data-testid={`alphabet-letter-${letter}`}
+                  className={`w-8 h-8 flex items-center justify-center rounded-md text-base font-medium transition-colors duration-150 ${
+                    isAvailable
+                      ? 'text-[#2A2F35] hover:bg-[#82A098] hover:text-white cursor-pointer'
+                      : 'text-[#C7CBCF] cursor-default'
+                  }`}
+                >
+                  {letter}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
