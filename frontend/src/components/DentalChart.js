@@ -182,13 +182,7 @@ export default function DentalChart({
         )}
 
         {/* ── TOOTH RENDERING ── */}
-        {isMissing ? (
-          /* Ghost outline only */
-          <rect x={sx + 8} y={slotTop + 6} width={SLOT - 16} height={slotH - 12}
-            rx={6} fill="rgba(200,210,218,0.12)"
-            stroke="rgba(150,165,178,0.30)" strokeWidth={1} strokeDasharray="3,3" />
-
-        ) : hasImp ? (
+        {hasImp ? (
           /* ── IMPLANT: screw in root zone, crown/fpd in crown zone, NO GAP ── */
           <>
             {/* Implant screw fills root zone exactly */}
@@ -211,19 +205,28 @@ export default function DentalChart({
           </>
 
         ) : hasFpd ? (
-          /* ── FPD CROWN ONLY (no implant): green crown + natural root ── */
+          /* ── FPD CROWN (no implant): green crown always; natural root only if this
+             tooth still has one — a pontic (marked missing) has no root, leave that zone empty ── */
           <>
-            <image href={rootSrc}
-              x={sx + 4} y={rootY} width={SLOT - 8} height={ROOT_H}
-              preserveAspectRatio="xMidYMid meet" />
+            {!isMissing && (
+              <image href={rootSrc}
+                x={sx + 4} y={rootY} width={SLOT - 8} height={ROOT_H}
+                preserveAspectRatio="xMidYMid meet" />
+            )}
             <image href={fpdSrc}
               x={sx + 2} y={crownY} width={SLOT - 4} height={CROWN_H}
               preserveAspectRatio="xMidYMid meet" />
-            {cfg.tint && (
+            {cfg.tint && !isMissing && (
               <rect x={sx + 2} y={rootY} width={SLOT - 4} height={slotH}
                 rx={4} fill={cfg.tint} style={{ pointerEvents: 'none' }} />
             )}
           </>
+
+        ) : isMissing ? (
+          /* Ghost outline only */
+          <rect x={sx + 8} y={slotTop + 6} width={SLOT - 16} height={slotH - 12}
+            rx={6} fill="rgba(200,210,218,0.12)"
+            stroke="rgba(150,165,178,0.30)" strokeWidth={1} strokeDasharray="3,3" />
 
         ) : (
           /* ── NATURAL TOOTH: single full tooth PNG spanning root+crown zone ── */
