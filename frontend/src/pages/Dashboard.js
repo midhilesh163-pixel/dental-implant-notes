@@ -202,11 +202,6 @@ const Dashboard = () => {
     setActiveTab(prev => (prev === key ? null : key));
   };
 
-  const getStageColor = (index) => {
-    const colors = ['#7DD3FC', '#A5F3FC', '#93C5FD', '#BAE6FD', '#E0F2FE'];
-    return colors[index % colors.length];
-  };
-
   if (loading) {
     return (
       <div className="p-8">
@@ -369,51 +364,6 @@ const Dashboard = () => {
             </div>
           </div>
         )}
-
-        {/* ── Active Patient Queue ── */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-[#2A2F35]" style={{ fontFamily: 'Work Sans, sans-serif' }}>
-              Active Patient Queue
-            </h3>
-            <Link to="/patients" className="text-[#82A098] text-sm font-medium hover:text-[#6B8A82] transition-colors flex items-center gap-1">
-              View All <ArrowRight size={14} />
-            </Link>
-          </div>
-
-          {patients.length === 0 ? (
-            <div className="bg-white rounded-xl border border-[#E5E5E2] p-8 text-center">
-              <p className="text-sm text-[#5C6773]">No patients yet. <Link to="/patients" className="text-[#82A098] font-medium">Add your first patient</Link></p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {patients.slice(0, 5).map((patient, index) => (
-                <Link
-                  key={patient._id}
-                  to={`/patients/${patient._id}`}
-                  data-testid={`patient-queue-${patient._id}`}
-                  className="bg-white rounded-xl p-4 border border-[#E5E5E2] hover:border-[#82A098]/50 hover:shadow-md transition-all duration-200 flex items-center gap-4"
-                >
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center text-[#1E40AF] font-bold text-sm flex-shrink-0"
-                    style={{ backgroundColor: getStageColor(index) }}
-                  >
-                    {getInitials(patient.name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-[#2A2F35] truncate">{patient.name}</p>
-                    <p className="text-xs text-[#5C6773]">ID #{patient._id.slice(-8).toUpperCase()}</p>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-[#5C6773]">
-                      <CalendarDots size={12} />
-                      <span>{fmtDate(patient.created_at)}</span>
-                    </div>
-                  </div>
-                  <ArrowRight size={16} className="text-[#5C6773] flex-shrink-0" />
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* ── Bottom Stats ── */}
         <div className="grid grid-cols-3 gap-4">
