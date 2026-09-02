@@ -48,6 +48,18 @@ const groupIntoCases = (implants) => {
   return Array.from(groups.values());
 };
 
+// Group implants purely by patient — used for the Active Cases list, where we
+// only care which patients currently have something healing, not how many
+// implants or sessions they have.
+const groupByPatient = (implants) => {
+  const groups = new Map();
+  implants.forEach(imp => {
+    if (!groups.has(imp.patient_id)) groups.set(imp.patient_id, []);
+    groups.get(imp.patient_id).push(imp);
+  });
+  return Array.from(groups.values());
+};
+
 // ── Tab panel config ───────────────────────────────────────────────────────
 const TAB_CONFIG = {
   active: {
@@ -60,6 +72,7 @@ const TAB_CONFIG = {
     ring: 'focus:ring-[#82A098]',
     badgeBg: 'bg-[#82A098]',
     description: 'Ongoing implant cases in placement or healing phase',
+    compact: true, // one row per patient, name only — regardless of implant count
   },
   completed: {
     key: 'completed',
@@ -71,6 +84,7 @@ const TAB_CONFIG = {
     ring: 'focus:ring-emerald-400',
     badgeBg: 'bg-emerald-500',
     description: 'Successful osseointegration, prosthetic loading complete',
+    compact: true, // one row per patient, name only — regardless of implant count
   },
   guarded: {
     key: 'guarded',
@@ -97,10 +111,33 @@ const TAB_CONFIG = {
 };
 
 // ── CaseRow ────────────────────────────────────────────────────────────────
-// `implants` is a group of one or more implant records for the same patient
-// placed on the same surgery date (a single clinical case).
-function CaseRow({ implants, patient, accent }) {
+// `implants` is a group of one or more implant records — either a single
+// clinical case (same patient + same surgery date) or, in `compact` mode,
+// every implant a patient has in this bucket, collapsed to just their name.
+function CaseRow({ implants, patient, accent, compact }) {
   const first = implants[0];
+
+  if (compact) {
+    return (
+      <Link
+        to={`/patients/${first.patient_id}`}
+        data-testid={`case-row-${first.patient_id}`}
+        className="flex items-center gap-4 p-4 bg-white rounded-xl border border-[#E5E5E2] hover:border-[#82A098]/50 hover:shadow-sm transition-all duration-150 group"
+      >
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+          style={{ backgroundColor: accent }}
+        >
+          {getInitials(patient?.name || 'UN')}
+        </div>
+        <p className="flex-1 min-w-0 text-sm font-semibold text-[#2A2F35] truncate">
+          {patient?.name || 'Unknown Patient'}
+        </p>
+        <ArrowRight size={14} className="text-[#5C6773] group-hover:text-[#2A2F35] transition-colors flex-shrink-0" />
+      </Link>
+    );
+  }
+
   const teeth = implants.map(i => i.tooth_number).filter(Boolean);
   const caseNumbers = [...new Set(implants.map(i => i.case_number).filter(Boolean))];
   const brands = [...new Set(implants.map(i => i.brand).filter(Boolean))];
@@ -187,13 +224,14 @@ const Dashboard = () => {
   // Build patient lookup map
   const patientMap = patients.reduce((acc, p) => { acc[p._id] = p; return acc; }, {});
 
-  // Bucket implants by outcome, then group same-patient/same-date implants
-  // into single clinical cases
+  // Bucket implants by outcome, then group them for display: Active Cases
+  // collapses to one row per patient (regardless of implant count), the
+  // other tabs group same-patient/same-date implants into single cases
   const buckets = { active: [], completed: [], guarded: [], failed: [] };
   allImplants.forEach(imp => { buckets[classify(imp)].push(imp); });
   const caseBuckets = {
-    active: groupIntoCases(buckets.active),
-    completed: groupIntoCases(buckets.completed),
+    active: groupByPatient(buckets.active),
+    completed: groupByPatient(buckets.completed),
     guarded: groupIntoCases(buckets.guarded),
     failed: groupIntoCases(buckets.failed),
   };
@@ -311,10 +349,11 @@ const Dashboard = () => {
                 <div className="space-y-2">
                   {tabCases.map(group => (
                     <CaseRow
-                      key={group[0]._id}
+                      key={tabCfg.compact ? group[0].patient_id : group[0]._id}
                       implants={group}
                       patient={patientMap[group[0].patient_id]}
                       accent={tabCfg.accent}
+                      compact={tabCfg.compact}
                     />
                   ))}
                 </div>
