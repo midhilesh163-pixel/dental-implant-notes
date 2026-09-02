@@ -33,6 +33,21 @@ const classify = (implant) => {
   return 'active'; // Pending / healing / anything else
 };
 
+// Group implants placed on the same patient + same surgery date into a single
+// clinical case — implants placed together heal together, so they belong in
+// one card, not one card per tooth. Implants without a surgery date, or a
+// different date, always get their own case.
+const groupIntoCases = (implants) => {
+  const groups = new Map();
+  implants.forEach(imp => {
+    const dateKey = imp.surgery_date ? new Date(imp.surgery_date).toDateString() : null;
+    const key = dateKey ? `${imp.patient_id}::${dateKey}` : `solo::${imp._id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(imp);
+  });
+  return Array.from(groups.values());
+};
+
 // ── Tab panel config ───────────────────────────────────────────────────────
 const TAB_CONFIG = {
   active: {
@@ -82,11 +97,19 @@ const TAB_CONFIG = {
 };
 
 // ── CaseRow ────────────────────────────────────────────────────────────────
-function CaseRow({ implant, patient, accent }) {
+// `implants` is a group of one or more implant records for the same patient
+// placed on the same surgery date (a single clinical case).
+function CaseRow({ implants, patient, accent }) {
+  const first = implants[0];
+  const teeth = implants.map(i => i.tooth_number).filter(Boolean);
+  const caseNumbers = [...new Set(implants.map(i => i.case_number).filter(Boolean))];
+  const brands = [...new Set(implants.map(i => i.brand).filter(Boolean))];
+  const outcomes = [...new Set(implants.map(i => i.implant_outcome).filter(Boolean))];
+
   return (
     <Link
-      to={`/patients/${implant.patient_id}`}
-      data-testid={`case-row-${implant._id}`}
+      to={`/patients/${first.patient_id}`}
+      data-testid={`case-row-${first._id}`}
       className="flex items-center gap-4 p-4 bg-white rounded-xl border border-[#E5E5E2] hover:border-[#82A098]/50 hover:shadow-sm transition-all duration-150 group"
     >
       {/* Avatar */}
@@ -101,14 +124,16 @@ function CaseRow({ implant, patient, accent }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-[#2A2F35] truncate">{patient?.name || 'Unknown Patient'}</p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
-          {implant.case_number && (
-            <span className="text-xs text-[#5C6773]">{implant.case_number}</span>
+          {caseNumbers.length > 0 && (
+            <span className="text-xs text-[#5C6773]">{caseNumbers.join(', ')}</span>
           )}
-          <span className="text-xs text-[#5C6773]">Tooth #{implant.tooth_number}</span>
-          {implant.brand && <span className="text-xs text-[#5C6773]">{implant.brand}</span>}
-          {implant.surgery_date && (
+          <span className="text-xs text-[#5C6773]">
+            {teeth.length > 1 ? `Teeth #${teeth.join(', #')}` : `Tooth #${teeth[0]}`}
+          </span>
+          {brands.length > 0 && <span className="text-xs text-[#5C6773]">{brands.join(' / ')}</span>}
+          {first.surgery_date && (
             <span className="flex items-center gap-1 text-xs text-[#5C6773]">
-              <CalendarDots size={11} /> {fmtDate(implant.surgery_date)}
+              <CalendarDots size={11} /> {fmtDate(first.surgery_date)}
             </span>
           )}
         </div>
@@ -120,7 +145,7 @@ function CaseRow({ implant, patient, accent }) {
           className="text-xs font-medium px-2.5 py-1 rounded-full"
           style={{ backgroundColor: `${accent}20`, color: accent }}
         >
-          {implant.implant_outcome || 'Pending'}
+          {outcomes.length > 0 ? outcomes.join(' / ') : 'Pending'}
         </span>
         <ArrowRight size={14} className="text-[#5C6773] group-hover:text-[#2A2F35] transition-colors" />
       </div>
@@ -162,9 +187,16 @@ const Dashboard = () => {
   // Build patient lookup map
   const patientMap = patients.reduce((acc, p) => { acc[p._id] = p; return acc; }, {});
 
-  // Bucket implants
+  // Bucket implants by outcome, then group same-patient/same-date implants
+  // into single clinical cases
   const buckets = { active: [], completed: [], guarded: [], failed: [] };
   allImplants.forEach(imp => { buckets[classify(imp)].push(imp); });
+  const caseBuckets = {
+    active: groupIntoCases(buckets.active),
+    completed: groupIntoCases(buckets.completed),
+    guarded: groupIntoCases(buckets.guarded),
+    failed: groupIntoCases(buckets.failed),
+  };
 
   const handleStatClick = (key) => {
     setActiveTab(prev => (prev === key ? null : key));
@@ -187,7 +219,7 @@ const Dashboard = () => {
   }
 
   const tabCfg = activeTab ? TAB_CONFIG[activeTab] : null;
-  const tabImplants = activeTab ? buckets[activeTab] : [];
+  const tabCases = activeTab ? caseBuckets[activeTab] : [];
 
   return (
     <div className="min-h-screen bg-[#F9F9F8]" style={{ fontFamily: 'IBM Plex Sans, sans-serif' }}>
@@ -204,7 +236,7 @@ const Dashboard = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {Object.values(TAB_CONFIG).map(cfg => {
             const Icon = cfg.icon;
-            const count = buckets[cfg.key].length;
+            const count = caseBuckets[cfg.key].length;
             const isOpen = activeTab === cfg.key;
             return (
               <button
@@ -260,7 +292,7 @@ const Dashboard = () => {
                   className="text-xs font-bold px-2.5 py-1 rounded-full text-white"
                   style={{ backgroundColor: tabCfg.accent }}
                 >
-                  {tabImplants.length} case{tabImplants.length !== 1 ? 's' : ''}
+                  {tabCases.length} case{tabCases.length !== 1 ? 's' : ''}
                 </span>
                 <button
                   onClick={() => setActiveTab(null)}
@@ -274,7 +306,7 @@ const Dashboard = () => {
 
             {/* Case list */}
             <div className="p-4 bg-[#F9F9F8]">
-              {tabImplants.length === 0 ? (
+              {tabCases.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Tooth size={40} className="text-[#E5E5E2] mb-3" weight="fill" />
                   <p className="text-sm font-medium text-[#5C6773]">No {tabCfg.label.toLowerCase()} found</p>
@@ -282,11 +314,11 @@ const Dashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {tabImplants.map(imp => (
+                  {tabCases.map(group => (
                     <CaseRow
-                      key={imp._id}
-                      implant={imp}
-                      patient={patientMap[imp.patient_id]}
+                      key={group[0]._id}
+                      implants={group}
+                      patient={patientMap[group[0].patient_id]}
                       accent={tabCfg.accent}
                     />
                   ))}
